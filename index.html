@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>AO3 读后感</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ========== 顶部导航栏 ========== -->
+    <header id="app-header">
+      <button id="btn-back" class="icon-btn" aria-label="返回">←</button>
+      <h1 id="header-title">📖 我的书架</h1>
+      <div id="header-actions"></div>
+    </header>
+
+    <!-- ========== 书架主页 ========== -->
+    <main id="bookshelf-view" class="view">
+
+      <!-- 搜索栏 -->
+      <div class="search-bar">
+        <input type="text" id="search-input" placeholder="搜索标题或作者..." autocomplete="off">
+        <button id="btn-search-clear" class="clear-btn" style="display:none">✕</button>
+      </div>
+
+      <!-- Fandom 书架标签栏 -->
+      <div id="fandom-tabs" class="fandom-tabs">
+        <button class="fandom-tab active" data-fandom="">📚 全部</button>
+      </div>
+
+      <!-- 筛选栏 -->
+      <div class="filter-bar">
+        <select id="filter-rating" class="filter-select">
+          <option value="all">全部评分</option>
+          <option value="5">⭐ 5星</option>
+          <option value="4">⭐ 4星</option>
+          <option value="3">⭐ 3星</option>
+          <option value="2">⭐ 2星</option>
+          <option value="1">⭐ 1星</option>
+          <option value="0">未评分</option>
+        </select>
+        <select id="filter-status" class="filter-select">
+          <option value="all">全部状态</option>
+          <option value="已完结">已完结</option>
+          <option value="连载中">连载中</option>
+          <option value="一发完">一发完</option>
+        </select>
+        <select id="filter-cp" class="filter-select">
+          <option value="all">全部 CP</option>
+        </select>
+        <select id="sort-by" class="filter-select">
+          <option value="date-desc">按阅读日期 ↓</option>
+          <option value="date-asc">按阅读日期 ↑</option>
+          <option value="rating-desc">按评分 ↓</option>
+          <option value="rating-asc">按评分 ↑</option>
+        </select>
+      </div>
+
+      <!-- 活跃的标签筛选 -->
+      <div id="active-tag-filters" class="active-tag-filters" style="display:none">
+        <span class="filter-label">筛选：</span>
+        <div id="active-filter-tags"></div>
+        <button id="btn-clear-tag-filter" class="btn-text">清除</button>
+      </div>
+
+      <!-- 视图切换 -->
+      <div class="view-toggle-bar">
+        <span id="result-count">共 0 条记录</span>
+        <div class="view-toggle">
+          <button id="btn-view-card" class="toggle-btn active" aria-label="卡片视图">▦</button>
+          <button id="btn-view-list" class="toggle-btn" aria-label="列表视图">☰</button>
+        </div>
+      </div>
+
+      <!-- 卡片/列表容器 -->
+      <div id="books-container" class="books-container card-view">
+        <!-- 动态填充 -->
+      </div>
+
+      <!-- 浮动添加按钮 -->
+      <button id="btn-add" class="fab" aria-label="添加记录">+</button>
+    </main>
+
+    <!-- ========== 添加/编辑页 ========== -->
+    <main id="form-view" class="view" style="display:none">
+
+      <!-- AO3 链接自动获取区 -->
+      <section class="form-section">
+        <label class="form-label">AO3 链接</label>
+        <div class="url-input-row">
+          <input type="url" id="input-ao3-url" placeholder="粘贴 AO3 作品链接..." autocomplete="off">
+          <button id="btn-auto-fetch" class="btn-primary btn-sm">自动获取</button>
+        </div>
+        <p id="fetch-status" class="fetch-status" style="display:none"></p>
+      </section>
+
+      <!-- 截图上传区（链接获取失败后显示） -->
+      <section id="ocr-section" class="form-section" style="display:none">
+        <label class="form-label">截图识别</label>
+        <div class="ocr-area">
+          <input type="file" id="input-screenshot" accept="image/*" capture="environment" style="display:none">
+          <button id="btn-upload-screenshot" class="btn-outline btn-sm">📷 上传 AO3 页面截图</button>
+          <div id="ocr-preview" class="ocr-preview" style="display:none">
+            <img id="ocr-preview-img" alt="截图预览">
+          </div>
+          <div id="ocr-progress" class="ocr-progress" style="display:none">
+            <progress id="ocr-progress-bar" value="0" max="100"></progress>
+            <span id="ocr-progress-text">正在识别...</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 基本信息 -->
+      <section class="form-section">
+        <label class="form-label" for="input-title">标题 <span class="required">*</span></label>
+        <input type="text" id="input-title" placeholder="文章标题" required>
+
+        <label class="form-label" for="input-author">作者 <span class="required">*</span></label>
+        <input type="text" id="input-author" placeholder="作者名">
+
+        <label class="form-label" for="input-fandom">Fandom / 原作</label>
+        <input type="text" id="input-fandom" placeholder="所属 Fandom">
+
+        <label class="form-label" for="input-cp">CP</label>
+        <input type="text" id="input-cp" placeholder="例如：角色A/角色B">
+      </section>
+
+      <!-- 字数 & 完结状态 -->
+      <section class="form-section form-row">
+        <div class="form-col">
+          <label class="form-label" for="input-wordcount">字数</label>
+          <input type="text" id="input-wordcount" placeholder="例如：3.5w">
+        </div>
+        <div class="form-col">
+          <label class="form-label" for="input-status">完结状态</label>
+          <select id="input-status">
+            <option value="">请选择</option>
+            <option value="连载中">连载中</option>
+            <option value="已完结">已完结</option>
+            <option value="一发完">一发完</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- 个人评分 -->
+      <section class="form-section">
+        <label class="form-label">个人评分</label>
+        <div id="star-rating" class="star-rating">
+          <span class="star" data-rating="1">☆</span>
+          <span class="star" data-rating="2">☆</span>
+          <span class="star" data-rating="3">☆</span>
+          <span class="star" data-rating="4">☆</span>
+          <span class="star" data-rating="5">☆</span>
+        </div>
+      </section>
+
+      <!-- AO3 原生 Tag -->
+      <section class="form-section">
+        <label class="form-label">AO3 原生 Tag</label>
+        <div class="tag-input-wrap">
+          <div id="ao3-tags-container" class="tags-container"></div>
+          <input type="text" id="input-ao3-tag" placeholder="输入后按回车添加..." class="tag-input">
+        </div>
+      </section>
+
+      <!-- 私人 Tag -->
+      <section class="form-section">
+        <label class="form-label">私人 Tag</label>
+        <div class="preset-tags" id="preset-tags">
+          <button class="preset-tag" data-tag="甜文">甜文</button>
+          <button class="preset-tag" data-tag="虐心">虐心</button>
+          <button class="preset-tag" data-tag="HE">HE</button>
+          <button class="preset-tag" data-tag="BE">BE</button>
+          <button class="preset-tag" data-tag="长草">长草</button>
+          <button class="preset-tag" data-tag="慢热">慢热</button>
+          <button class="preset-tag" data-tag="神作">神作</button>
+          <button class="preset-tag" data-tag="文笔好">文笔好</button>
+          <button class="preset-tag" data-tag="设定绝">设定绝</button>
+          <button class="preset-tag" data-tag="待追更">待追更</button>
+        </div>
+        <div class="tag-input-wrap">
+          <div id="private-tags-container" class="tags-container"></div>
+          <input type="text" id="input-private-tag" placeholder="输入自定义标签，回车添加..." class="tag-input">
+        </div>
+      </section>
+
+      <!-- 阅读日期 -->
+      <section class="form-section">
+        <label class="form-label" for="input-date">阅读日期</label>
+        <input type="date" id="input-date">
+      </section>
+
+      <!-- 读后感 -->
+      <section class="form-section">
+        <label class="form-label" for="input-notes">读后感</label>
+        <textarea id="input-notes" rows="6" placeholder="在这里写下你的读后感..."></textarea>
+      </section>
+
+      <!-- 保存按钮 -->
+      <div class="form-actions">
+        <button id="btn-save" class="btn-primary btn-lg">保存</button>
+        <button id="btn-cancel-form" class="btn-text">取消</button>
+      </div>
+    </main>
+
+    <!-- ========== 详情页 ========== -->
+    <main id="detail-view" class="view" style="display:none">
+      <div id="detail-content" class="detail-content">
+        <!-- 动态填充 -->
+      </div>
+      <div class="detail-actions">
+        <button id="btn-edit" class="btn-primary">编辑</button>
+        <button id="btn-delete" class="btn-danger">删除</button>
+      </div>
+    </main>
+
+    <!-- ========== 删除确认弹窗 ========== -->
+    <div id="confirm-dialog" class="dialog-overlay" style="display:none">
+      <div class="dialog">
+        <p>确定要删除这条记录吗？</p>
+        <p class="dialog-warning">删除后无法恢复</p>
+        <div class="dialog-actions">
+          <button id="btn-confirm-delete" class="btn-danger">确认删除</button>
+          <button id="btn-cancel-delete" class="btn-text">取消</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
