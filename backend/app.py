@@ -100,6 +100,7 @@ def parse_ao3_page(html, ao3_url):
         'language': language,
         'published': published,
         'ao3Url': ao3_url,
+        'workId': str(extract_work_id(ao3_url) or ''),
     }
 
 

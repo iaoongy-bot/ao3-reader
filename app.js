@@ -408,6 +408,7 @@ const $inputFandom = document.getElementById('input-fandom');
 const $inputCp = document.getElementById('input-cp');
 const $inputWordcount = document.getElementById('input-wordcount');
 const $inputStatus = document.getElementById('input-status');
+const $inputWorkId = document.getElementById('input-workid');
 const $inputDate = document.getElementById('input-date');
 const $inputNotes = document.getElementById('input-notes');
 const $starRating = document.getElementById('star-rating');
@@ -431,6 +432,7 @@ function resetForm() {
   $inputCp.value = '';
   $inputWordcount.value = '';
   $inputStatus.value = '';
+  $inputWorkId.value = '';
   $inputDate.value = new Date().toISOString().split('T')[0];
   $inputNotes.value = '';
   formRating = 0;
@@ -456,6 +458,7 @@ function fillForm(note) {
   $inputCp.value = note.cp || '';
   $inputWordcount.value = note.wordCount || '';
   $inputStatus.value = note.completionStatus || '';
+  $inputWorkId.value = note.workId || '';
   $inputDate.value = note.readingDate || new Date().toISOString().split('T')[0];
   $inputNotes.value = note.notes || '';
   formRating = note.rating || 0;
@@ -478,6 +481,7 @@ function formToNote() {
     cp: $inputCp.value.trim(),
     wordCount: $inputWordcount.value.trim(),
     completionStatus: $inputStatus.value,
+    workId: $inputWorkId.value.trim(),
     rating: formRating,
     ao3Tags: [...formAo3Tags],
     privateTags: [...formPrivateTags],
@@ -646,6 +650,7 @@ function openDetail(id) {
     ${note.cp ? `<div class="detail-field"><div class="detail-field-label">CP</div><div class="detail-field-value">${escapeHtml(note.cp)}</div></div>` : ''}
     ${note.wordCount ? `<div class="detail-field"><div class="detail-field-label">字数</div><div class="detail-field-value">${escapeHtml(note.wordCount)}</div></div>` : ''}
     ${note.completionStatus ? `<div class="detail-field"><div class="detail-field-label">完结状态</div><div class="detail-field-value">${escapeHtml(note.completionStatus)}</div></div>` : ''}
+    ${note.workId ? `<div class="detail-field"><div class="detail-field-label">门牌号</div><div class="detail-field-value">${escapeHtml(note.workId)}</div></div>` : ''}
     ${ao3TagsHtml ? `<div class="detail-field"><div class="detail-field-label">AO3 标签</div><div class="detail-tags">${ao3TagsHtml}</div></div>` : ''}
     ${privateTagsHtml ? `<div class="detail-field"><div class="detail-field-label">私人 Tag</div><div class="detail-tags">${privateTagsHtml}</div></div>` : ''}
     ${note.readingDate ? `<div class="detail-field"><div class="detail-field-label">阅读日期</div><div class="detail-field-value">${note.readingDate}</div></div>` : ''}
@@ -730,6 +735,9 @@ function fillFormFromAO3Data(data) {
       $inputStatus.value = '连载中';
     }
   }
+
+  // 门牌号（从链接提取 work ID）
+  if (data.workId) $inputWorkId.value = data.workId;
 
   // AO3 标签
   const allTags = [...data.fandom, ...data.relationships, ...data.characters, ...data.freeformTags];
