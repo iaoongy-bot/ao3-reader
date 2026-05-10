@@ -45,9 +45,9 @@ def texts(elements):
 def parse_ao3_page(html, ao3_url):
     soup = BeautifulSoup(html, 'html.parser')
 
-    # 标题
-    title_link = soup.select_one('h2.title.heading a') or soup.select_one('h2.heading a')
-    title = title_link.get_text(strip=True) if title_link else ''
+    # 标题 — 优先找链接内的文字，否则直接取 heading 文字
+    title_el = soup.select_one('h2.title.heading a') or soup.select_one('h2.title.heading') or soup.select_one('h2.heading')
+    title = title_el.get_text(strip=True) if title_el else ''
 
     # 作者
     author_el = soup.select_one('a[rel="author"]')
