@@ -1,19 +1,24 @@
 """AO3 读后感 - 后端 API
-使用 ao3_api 库获取 AO3 作品信息，前端调用此 API 即可绕过 CORS 限制。
+直接抓取 AO3 作品页面 HTML，解析后返回 JSON。
 部署于 Render.com 免费 tier。
 """
 
 import re
 import logging
+import requests
+from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import AO3
 
 app = Flask(__name__)
 CORS(app)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (compatible; AO3Reader/1.0; +https://ao3-reader.onrender.com)',
+}
 
 
 def extract_work_id(url):
@@ -22,110 +27,88 @@ def extract_work_id(url):
     return int(match.group(1)) if match else None
 
 
-def safe_get(obj, *attr_names):
-    """依次尝试多个属性名，返回第一个存在的值，否则返回默认值"""
-    for name in attr_names:
-        val = getattr(obj, name, None)
-        if val is not None and val != '' and val != []:
-            return val
-    return None
+def text(el):
+    """安全获取元素文本"""
+    return el.get_text(strip=True) if el else ''
 
 
-def build_work_data(work, ao3_url):
-    """从 AO3.Work 对象提取所有字段，返回字典"""
-    # 基本字段
-    title = str(safe_get(work, 'title') or '')
+def texts(elements):
+    """获取元素列表的文本"""
+    return [el.get_text(strip=True) for el in elements]
 
-    # 作者 - 可能是字符串、列表，或需要从 authors 列表取第一个
-    author_raw = safe_get(work, 'author', 'authors')
-    if isinstance(author_raw, list):
-        author = author_raw[0] if author_raw else ''
-    else:
-        author = str(author_raw) if author_raw else ''
 
-    # 同人圈
-    fandom_raw = safe_get(work, 'fandoms', 'fandom') or []
-    if isinstance(fandom_raw, str):
-        fandom = [fandom_raw]
-    else:
-        fandom = [str(f) for f in fandom_raw]
+def parse_ao3_page(html, ao3_url):
+    """解析 AO3 作品页面 HTML，提取元数据"""
+    soup = BeautifulSoup(html, 'html.parser')
+    work = soup.find('div', class_='wrapper') or soup
 
-    # 关系 / CP
-    rel_raw = safe_get(work, 'relationships', 'relationship', 'relationships_list') or []
-    if isinstance(rel_raw, str):
-        relationships = [rel_raw]
-    else:
-        relationships = [str(r) for r in rel_raw]
+    # === 标题 ===
+    title_el = work.select_one('h2.title.heading') or work.select_one('h2.heading')
+    title = title_el.get_text(strip=True) if title_el else ''
+    # 去掉标题后面可能包含的作者名 "Title - Author"
+    # AO3 标题格式: "Title by Author"
+    # 我们用 h2.heading > a 可能更好
+    title_link = work.select_one('h2.title.heading a') or work.select_one('h2.heading a')
+    title = title_link.get_text(strip=True) if title_link else title
 
-    # 角色
-    char_raw = safe_get(work, 'characters', 'character') or []
-    if isinstance(char_raw, str):
-        characters = [char_raw]
-    else:
-        characters = [str(c) for c in char_raw]
+    # === 作者 ===
+    author_el = work.select_one('a[rel="author"]')
+    author = author_el.get_text(strip=True) if author_el else ''
 
-    # 自由标签
-    tags_raw = safe_get(work, 'tags', 'freeform_tags', 'additional_tags', 'freeformtags') or []
-    if isinstance(tags_raw, str):
-        freeform_tags = [tags_raw]
-    else:
-        freeform_tags = [str(t) for t in tags_raw]
+    # === 同人圈 ===
+    fandom = texts(work.select('dd.fandom.tags a.tag'))
 
-    # 评级
-    rating_raw = safe_get(work, 'rating')
-    if isinstance(rating_raw, list):
-        rating = rating_raw[0] if rating_raw else ''
-    else:
-        rating = str(rating_raw) if rating_raw else ''
+    # === 关系 / CP ===
+    relationships = texts(work.select('dd.relationship.tags a.tag'))
 
-    # 警告
-    warn_raw = safe_get(work, 'warnings', 'warning') or []
-    if isinstance(warn_raw, str):
-        warnings = [warn_raw]
-    else:
-        warnings = [str(w) for w in warn_raw]
+    # === 角色 ===
+    characters = texts(work.select('dd.character.tags a.tag'))
 
-    # 类别
-    cat_raw = safe_get(work, 'category', 'categories')
-    if isinstance(cat_raw, list):
-        category = cat_raw[0] if cat_raw else ''
-    else:
-        category = str(cat_raw) if cat_raw else ''
+    # === 自由标签 ===
+    freeform_tags = texts(work.select('dd.freeform.tags a.tag'))
 
-    # 摘要
-    summary = str(safe_get(work, 'summary') or '')
+    # === 评级 ===
+    rating_el = work.select_one('dd.rating.tags a.tag') or work.select_one('dd.rating')
+    rating = rating_el.get_text(strip=True) if rating_el else ''
 
-    # 字数
-    words_raw = safe_get(work, 'words', 'nwords', 'word_count')
-    if words_raw is not None:
-        word_count = str(words_raw)
-    else:
-        word_count = ''
+    # === 警告 ===
+    warnings = texts(work.select('dd.warning.tags a.tag'))
 
-    # 章节
-    nchapters = safe_get(work, 'nchapters', 'chapters_count')
-    if nchapters is not None:
-        chapters = str(nchapters)
-    else:
-        chapters = ''
+    # === 类别 ===
+    categories = texts(work.select('dd.category.tags a.tag'))
+    category = categories[0] if categories else ''
 
-    # 完结状态
-    complete = safe_get(work, 'complete', 'completed', 'is_complete')
-    if complete is not None:
-        # 如果 chapters 信息包含 completed / total 格式，尝试判断
-        status = 'Completed' if complete else 'In Progress'
-    else:
-        status = ''
+    # === 摘要 ===
+    summary_el = work.select_one('blockquote.userstuff.summary')
+    summary = summary_el.get_text(strip=True) if summary_el else ''
 
-    # 语言
-    language = str(safe_get(work, 'language') or '')
+    # === 字数 ===
+    words_el = work.select_one('dd.words')
+    word_count = words_el.get_text(strip=True) if words_el else ''
 
-    # 发布日期
-    published_raw = safe_get(work, 'date_published', 'published', 'date')
-    if hasattr(published_raw, 'isoformat'):
-        published = published_raw.isoformat()
-    else:
-        published = str(published_raw) if published_raw else ''
+    # === 章节 ===
+    chapters_el = work.select_one('dd.chapters')
+    chapters = chapters_el.get_text(strip=True) if chapters_el else ''
+
+    # === 语言 ===
+    lang_el = work.select_one('dd.language')
+    language = lang_el.get_text(strip=True) if lang_el else ''
+
+    # === 发布日期 ===
+    pub_el = work.select_one('dd.published')
+    published = pub_el.get_text(strip=True) if pub_el else ''
+
+    # === 完结状态 ===
+    status_el = work.select_one('dd.status')
+    status = status_el.get_text(strip=True) if status_el else ''
+    # 从章节信息推断
+    if not status and chapters:
+        parts = chapters.split('/')
+        if len(parts) == 2:
+            if parts[0] == parts[1]:
+                status = 'Completed' if parts[0] != '1' else 'Completed'
+            else:
+                status = 'In Progress'
 
     return {
         'title': title,
@@ -160,16 +143,32 @@ def fetch_work():
     if not work_id:
         return jsonify({'ok': False, 'error': '无法从 URL 提取作品 ID，请检查链接格式'}), 400
 
-    logger.info(f'Fetching work {work_id} from {url}')
+    logger.info(f'Fetching work {work_id}')
 
     try:
-        work = AO3.Work(work_id)
-        data = build_work_data(work, url)
+        resp = requests.get(url, headers=HEADERS, timeout=20)
+        resp.raise_for_status()
+
+        if resp.status_code != 200:
+            return jsonify({'ok': False, 'error': f'AO3 返回状态码 {resp.status_code}'}), 502
+
+        data = parse_ao3_page(resp.text, url)
+
+        if not data['title'] and not data['author']:
+            return jsonify({'ok': False, 'error': '无法解析页面内容，作品可能已被删除或需要登录'}), 404
+
         logger.info(f'Success: "{data["title"]}" by {data["author"]}')
         return jsonify({'ok': True, 'data': data})
+
+    except requests.Timeout:
+        logger.error(f'Timeout fetching work {work_id}')
+        return jsonify({'ok': False, 'error': '请求 AO3 超时，请稍后重试'}), 504
+    except requests.RequestException as e:
+        logger.error(f'Network error fetching work {work_id}: {e}')
+        return jsonify({'ok': False, 'error': f'网络请求失败: {str(e)}'}), 502
     except Exception as e:
-        logger.error(f'Failed to fetch work {work_id}: {e}')
-        return jsonify({'ok': False, 'error': f'获取失败: {str(e)}'}), 500
+        logger.error(f'Unexpected error for work {work_id}: {e}')
+        return jsonify({'ok': False, 'error': f'解析失败: {str(e)}'}), 500
 
 
 @app.route('/api/health')
