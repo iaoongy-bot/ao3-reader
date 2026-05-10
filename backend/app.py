@@ -17,7 +17,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (compatible; AO3Reader/1.0; +https://ao3-reader.onrender.com)',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
 }
 
 
@@ -146,7 +148,7 @@ def fetch_work():
     logger.info(f'Fetching work {work_id}')
 
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=20)
+        resp = requests.get(url, headers=HEADERS, timeout=20, verify=True)
         resp.raise_for_status()
 
         if resp.status_code != 200:
