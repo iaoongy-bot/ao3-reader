@@ -1,13 +1,17 @@
 """AO3 读后感 - 后端 API
 多级策略获取 AO3 作品页面：直接请求 → Cloudscraper → CORS 代理。
+SQLite 存储笔记数据，支持跨浏览器同步。
 部署于 Render.com 免费 tier。
 """
 
 import re
+import os
+import json
+import sqlite3
 import logging
 import requests
 from bs4 import BeautifulSoup
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -15,6 +19,8 @@ CORS(app)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+API_KEY = os.environ.get('AO3_API_KEY', 'ao3-reader-secret-key')
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
@@ -32,6 +38,98 @@ CORS_PROXIES = [
     'https://api.allorigins.win/raw?url=',
 ]
 
+DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'notes.db')
+
+
+# ==================== Database ====================
+
+def get_db():
+    if 'db' not in g:
+        g.db = sqlite3.connect(DATABASE)
+        g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA journal_mode=WAL")
+    return g.db
+
+
+@app.teardown_appcontext
+def close_db(exception):
+    db = g.pop('db', None)
+    if db is not None:
+        db.close()
+
+
+def init_db():
+    with app.app_context():
+        db = get_db()
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS notes (
+                id TEXT PRIMARY KEY,
+                data TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        ''')
+        db.commit()
+
+
+# ==================== Auth ====================
+
+def check_auth():
+    key = request.headers.get('X-Api-Key') or request.args.get('key', '')
+    return key == API_KEY
+
+
+# ==================== Note CRUD ====================
+
+@app.route('/api/notes', methods=['GET'])
+def list_notes():
+    if not check_auth():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+
+    db = get_db()
+    rows = db.execute('SELECT id, data, updated_at FROM notes ORDER BY updated_at DESC').fetchall()
+    notes = []
+    for r in rows:
+        note = json.loads(r['data'])
+        note['id'] = r['id']
+        note['updatedAt'] = r['updated_at']
+        notes.append(note)
+    return jsonify({'ok': True, 'data': notes})
+
+
+@app.route('/api/notes', methods=['POST'])
+def save_note():
+    if not check_auth():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+
+    body = request.get_json(force=True)
+    note_id = body.get('id', '')
+    data = body.get('data', {})
+    updated_at = body.get('updatedAt', '')
+
+    if not note_id or not data:
+        return jsonify({'ok': False, 'error': 'id 和 data 不能为空'}), 400
+
+    db = get_db()
+    db.execute(
+        'INSERT OR REPLACE INTO notes (id, data, updated_at) VALUES (?, ?, ?)',
+        (note_id, json.dumps(data, ensure_ascii=False), updated_at)
+    )
+    db.commit()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/notes/<note_id>', methods=['DELETE'])
+def delete_note(note_id):
+    if not check_auth():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+
+    db = get_db()
+    db.execute('DELETE FROM notes WHERE id = ?', (note_id,))
+    db.commit()
+    return jsonify({'ok': True})
+
+
+# ==================== AO3 Fetch ====================
 
 def extract_work_id(url):
     match = re.search(r'/works/(\d+)', url)
@@ -45,39 +143,32 @@ def texts(elements):
 def parse_ao3_page(html, ao3_url):
     soup = BeautifulSoup(html, 'html.parser')
 
-    # 标题 — 优先找链接内的文字，否则直接取 heading 文字
     title_el = soup.select_one('h2.title.heading a') or soup.select_one('h2.title.heading') or soup.select_one('h2.heading')
     title = title_el.get_text(strip=True) if title_el else ''
 
-    # 作者
     author_el = soup.select_one('a[rel="author"]')
     author = author_el.get_text(strip=True) if author_el else ''
 
-    # 同人圈 / 关系 / 角色 / 自由标签
     fandom = texts(soup.select('dd.fandom.tags a.tag'))
     relationships = texts(soup.select('dd.relationship.tags a.tag'))
     characters = texts(soup.select('dd.character.tags a.tag'))
     freeform_tags = texts(soup.select('dd.freeform.tags a.tag'))
 
-    # 评级 / 警告 / 类别
     rating_el = soup.select_one('dd.rating.tags a.tag') or soup.select_one('dd.rating')
     rating = rating_el.get_text(strip=True) if rating_el else ''
     warnings = texts(soup.select('dd.warning.tags a.tag'))
     cats = texts(soup.select('dd.category.tags a.tag'))
     category = cats[0] if cats else ''
 
-    # 摘要
     summary_el = soup.select_one('blockquote.userstuff.summary')
     summary = summary_el.get_text(strip=True) if summary_el else ''
 
-    # 字数 / 章节 / 语言 / 发布 / 状态
     word_count = _dd_text(soup, 'dd.words')
     chapters = _dd_text(soup, 'dd.chapters')
     language = _dd_text(soup, 'dd.language')
     published = _dd_text(soup, 'dd.published')
     status = _dd_text(soup, 'dd.status')
 
-    # 从章节推断状态
     if not status and chapters:
         parts = chapters.split('/')
         if len(parts) == 2:
@@ -159,7 +250,6 @@ def fetch_work():
     html = None
     errors = []
 
-    # 依次尝试三种策略
     for name, fetcher in [
         ('direct', fetch_direct),
         ('cloudscraper', fetch_cloudscraper),
@@ -195,6 +285,10 @@ def fetch_work():
 def health():
     return jsonify({'ok': True, 'status': 'running'})
 
+
+# ==================== Init ====================
+
+init_db()
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

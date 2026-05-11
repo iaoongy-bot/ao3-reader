@@ -3,27 +3,106 @@
    ================================================================ */
 
 const STORAGE_KEY = 'ao3_reading_notes';
+const API_KEY = 'ao3-reader-secret-key';
 let notes = [];
 let currentView = 'bookshelf';
 let editingId = null;
 let currentDetailId = null;
-let ocrWorker = null; // Tesseract worker 引用
-let activeFandom = '';  // 当前选中的 Fandom（空 = 全部）
-let activeCp = 'all';    // 当前选中的 CP 筛选
+let ocrWorker = null;
+let activeFandom = '';
+let activeCp = 'all';
+let backendAvailable = false;
+
+// ========== 后端同步 ==========
+
+async function syncFromBackend() {
+  try {
+    const resp = await fetch(`${BACKEND_URL}/api/notes?key=${encodeURIComponent(API_KEY)}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    if (json.ok && json.data) {
+      backendAvailable = true;
+      return json.data;
+    }
+  } catch (e) {
+    backendAvailable = false;
+    console.warn('Backend unavailable, using local storage');
+  }
+  return null;
+}
+
+async function syncToBackend(note) {
+  if (!backendAvailable) return;
+  try {
+    await fetch(`${BACKEND_URL}/api/notes?key=${encodeURIComponent(API_KEY)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: note.id, data: note, updatedAt: note.updatedAt || new Date().toISOString() }),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (e) {
+    backendAvailable = false;
+    console.warn('Backend sync failed');
+  }
+}
+
+async function deleteFromBackend(id) {
+  if (!backendAvailable) return;
+  try {
+    await fetch(`${BACKEND_URL}/api/notes/${id}?key=${encodeURIComponent(API_KEY)}`, {
+      method: 'DELETE',
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (e) {
+    backendAvailable = false;
+  }
+}
 
 // ========== 数据读写 ==========
 
-function loadNotes() {
+async function loadNotes() {
+  // 先尝试从后端同步
+  const remote = await syncFromBackend();
+  if (remote && remote.length > 0) {
+    notes = remote;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+    return;
+  }
+
+  // 回退到 localStorage
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     notes = raw ? JSON.parse(raw) : [];
   } catch (e) {
     notes = [];
   }
+
+  // 如果本地有数据但后端为空，把本地数据推送到后端
+  if (notes.length > 0) {
+    backendAvailable = true;
+    for (const n of notes) {
+      await syncToBackend(n);
+    }
+  }
 }
 
 function saveNotes() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+}
+
+// 保存并同步到后端
+function saveAndSync(note) {
+  saveNotes();
+  syncToBackend(note);
+}
+
+// 删除并同步到后端
+function deleteAndSync(id) {
+  notes = notes.filter(n => n.id !== id);
+  saveNotes();
+  deleteFromBackend(id);
 }
 
 function generateId() {
@@ -107,6 +186,9 @@ const $btnViewList = document.getElementById('btn-view-list');
 const $activeTagFilters = document.getElementById('active-tag-filters');
 const $activeFilterTags = document.getElementById('active-filter-tags');
 const $btnClearTagFilter = document.getElementById('btn-clear-tag-filter');
+const $btnExport = document.getElementById('btn-export');
+const $btnImport = document.getElementById('btn-import');
+const $inputImportFile = document.getElementById('input-import-file');
 const $btnAdd = document.getElementById('btn-add');
 
 function getFilteredNotes() {
@@ -277,13 +359,9 @@ function createBookCard(note) {
 
   const starsHtml = renderStarIcons(note.rating);
 
-  const allTags = [...note.ao3Tags.map(t => ({ text: t, type: 'ao3' })),
-                   ...note.privateTags.map(t => ({ text: t, type: 'private' }))];
-  const tagsHtml = allTags.map(t =>
-    `<span class="card-tag ${t.type}" data-tag="${escapeHtml(t.text)}">${escapeHtml(t.text)}</span>`
+  const privateTagsHtml = (note.privateTags || []).map(t =>
+    `<span class="card-tag private" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`
   ).join('');
-
-  const notesPreview = truncateText(note.notes || '', 60);
 
   card.innerHTML = `
     <div class="card-header">
@@ -292,10 +370,12 @@ function createBookCard(note) {
     </div>
     <div class="card-meta">
       <span>${escapeHtml(note.author || '未知作者')}</span>
-      ${note.completionStatus ? `<span>· ${escapeHtml(note.completionStatus)}</span>` : ''}
     </div>
-    ${tagsHtml ? `<div class="card-tags">${tagsHtml}</div>` : ''}
-    ${notesPreview ? `<div class="card-notes-preview">${escapeHtml(notesPreview)}</div>` : ''}
+    ${note.fandom ? `<div class="card-meta card-fandom"><span>${escapeHtml(note.fandom)}</span></div>` : ''}
+    ${note.cp ? `<div class="card-meta card-cp"><span>${escapeHtml(note.cp)}</span></div>` : ''}
+    ${note.workId ? `<div class="card-meta card-workid"><span>${escapeHtml(note.workId)}</span></div>` : ''}
+    ${privateTagsHtml ? `<div class="card-tags">${privateTagsHtml}</div>` : ''}
+    ${note.notes ? `<div class="card-notes-preview">${escapeHtml(note.notes)}</div>` : ''}
     <div class="card-date">${note.readingDate}</div>
   `;
 
@@ -381,6 +461,46 @@ $btnViewList.addEventListener('click', () => {
 });
 
 $btnClearTagFilter.addEventListener('click', clearTagFilter);
+
+// 导出
+$btnExport.addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(notes, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ao3-notes-backup-${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// 导入
+$btnImport.addEventListener('click', () => $inputImportFile.click());
+
+$inputImportFile.addEventListener('change', () => {
+  const file = $inputImportFile.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const imported = JSON.parse(reader.result);
+      if (!Array.isArray(imported)) throw new Error('格式错误');
+      // 合并：以 id 去重，导入的覆盖已有
+      const map = new Map(notes.map(n => [n.id, n]));
+      imported.forEach(n => { if (n.id) map.set(n.id, n); });
+      notes = Array.from(map.values());
+      saveNotes();
+      // 同步到后端
+      backendAvailable = true;
+      imported.forEach(n => syncToBackend(n));
+      renderBookshelf();
+      alert(`成功导入 ${imported.length} 条记录`);
+    } catch (e) {
+      alert('导入失败：文件格式不正确');
+    }
+  };
+  reader.readAsText(file);
+  $inputImportFile.value = '';
+});
 
 // 添加按钮
 $btnAdd.addEventListener('click', () => {
@@ -518,33 +638,37 @@ $starRating.addEventListener('click', (e) => {
 
 // 标签组件
 function renderTags(container, tags, type) {
-  container.innerHTML = tags.map((t, i) =>
+  container.innerHTML = tags.map(t =>
     `<span class="tag-item ${type}">
       ${escapeHtml(t)}
-      <span class="tag-remove" data-index="${i}" data-type="${type}">×</span>
+      <span class="tag-remove" data-tag="${escapeHtml(t)}" data-type="${type}">×</span>
     </span>`
   ).join('');
 
   container.querySelectorAll('.tag-remove').forEach(btn => {
     btn.addEventListener('click', () => {
-      const idx = parseInt(btn.dataset.index);
-      if (btn.dataset.type === 'ao3') {
-        formAo3Tags.splice(idx, 1);
-        renderTags($ao3TagsContainer, formAo3Tags, 'ao3');
-      } else {
-        formPrivateTags.splice(idx, 1);
-        renderTags($privateTagsContainer, formPrivateTags, 'private');
-        updatePresetTagState();
+      const tag = btn.dataset.tag;
+      const tagsArr = getTagArray(btn.dataset.type);
+      const idx = tagsArr.indexOf(tag);
+      if (idx >= 0) {
+        tagsArr.splice(idx, 1);
+        renderTags(container, tagsArr, type);
+        if (btn.dataset.type === 'private') updatePresetTagState();
       }
     });
   });
 }
 
-function addTagInputHandler(inputEl, tagsArr, container, type) {
+function getTagArray(type) {
+  return type === 'ao3' ? formAo3Tags : formPrivateTags;
+}
+
+function addTagInputHandler(inputEl, container, type) {
   inputEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       const val = inputEl.value.trim();
+      const tagsArr = getTagArray(type);
       if (val && !tagsArr.includes(val)) {
         tagsArr.push(val);
         renderTags(container, tagsArr, type);
@@ -555,8 +679,8 @@ function addTagInputHandler(inputEl, tagsArr, container, type) {
   });
 }
 
-addTagInputHandler($inputAo3Tag, formAo3Tags, $ao3TagsContainer, 'ao3');
-addTagInputHandler($inputPrivateTag, formPrivateTags, $privateTagsContainer, 'private');
+addTagInputHandler($inputAo3Tag, $ao3TagsContainer, 'ao3');
+addTagInputHandler($inputPrivateTag, $privateTagsContainer, 'private');
 
 // 预置标签
 function updatePresetTagState() {
@@ -597,7 +721,7 @@ $btnSave.addEventListener('click', () => {
   } else {
     notes.push(note);
   }
-  saveNotes();
+  saveAndSync(note);
   showView('bookshelf');
   renderBookshelf();
 });
@@ -681,8 +805,7 @@ $btnCancelDelete.addEventListener('click', () => {
 
 $btnConfirmDelete.addEventListener('click', () => {
   if (pendingDeleteId) {
-    notes = notes.filter(n => n.id !== pendingDeleteId);
-    saveNotes();
+    deleteAndSync(pendingDeleteId);
     pendingDeleteId = null;
   }
   $confirmDialog.style.display = 'none';
@@ -1067,8 +1190,8 @@ function fillFormFromOCRData(data) {
 // 初始化
 // ================================================================
 
-function init() {
-  loadNotes();
+async function init() {
+  await loadNotes();
 
   // 设置默认日期
   $inputDate.value = new Date().toISOString().split('T')[0];

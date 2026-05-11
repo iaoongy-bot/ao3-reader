@@ -273,6 +273,12 @@ body {
   color: var(--text-secondary);
 }
 
+.view-toggle-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .view-toggle {
   display: flex;
   gap: 2px;
@@ -365,6 +371,38 @@ body {
 
 .card-meta span {
   margin-right: 8px;
+}
+
+.card-fandom {
+  color: #6b4fa0;
+}
+
+.card-fandom span::before {
+  content: '原作: ';
+  font-size: 0.7rem;
+  opacity: 0.65;
+}
+
+.card-cp {
+  color: #b8455a;
+}
+
+.card-cp span::before {
+  content: 'CP: ';
+  font-size: 0.7rem;
+  opacity: 0.65;
+}
+
+.card-workid {
+  color: var(--text-light);
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 0.73rem;
+}
+
+.card-workid span::before {
+  content: '#';
+  opacity: 0.5;
+  margin-right: 1px;
 }
 
 .card-tags {

@@ -68,9 +68,14 @@
       <!-- 视图切换 -->
       <div class="view-toggle-bar">
         <span id="result-count">共 0 条记录</span>
-        <div class="view-toggle">
-          <button id="btn-view-card" class="toggle-btn active" aria-label="卡片视图">▦</button>
-          <button id="btn-view-list" class="toggle-btn" aria-label="列表视图">☰</button>
+        <div class="view-toggle-actions">
+          <button id="btn-export" class="btn-text btn-sm">导出</button>
+          <button id="btn-import" class="btn-text btn-sm">导入</button>
+          <input type="file" id="input-import-file" accept=".json" style="display:none">
+          <div class="view-toggle">
+            <button id="btn-view-card" class="toggle-btn active" aria-label="卡片视图">▦</button>
+            <button id="btn-view-list" class="toggle-btn" aria-label="列表视图">☰</button>
+          </div>
         </div>
       </div>
 
@@ -177,14 +182,14 @@
         <div class="preset-tags" id="preset-tags">
           <button class="preset-tag" data-tag="甜文">甜文</button>
           <button class="preset-tag" data-tag="虐心">虐心</button>
+          <button class="preset-tag" data-tag="酸涩">酸涩</button>
           <button class="preset-tag" data-tag="HE">HE</button>
           <button class="preset-tag" data-tag="BE">BE</button>
-          <button class="preset-tag" data-tag="长草">长草</button>
           <button class="preset-tag" data-tag="慢热">慢热</button>
           <button class="preset-tag" data-tag="神作">神作</button>
           <button class="preset-tag" data-tag="文笔好">文笔好</button>
           <button class="preset-tag" data-tag="设定绝">设定绝</button>
-          <button class="preset-tag" data-tag="待追更">待追更</button>
+          <button class="preset-tag" data-tag="好车">好车</button>
         </div>
         <div class="tag-input-wrap">
           <div id="private-tags-container" class="tags-container"></div>
