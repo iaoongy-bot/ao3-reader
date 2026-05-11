@@ -1011,169 +1011,196 @@ function extractFieldsFromOCR(text) {
     author: '',
     fandom: '',
     cp: '',
-    relationships: [],
     wordCount: '',
     chapters: '',
     completionStatus: '',
     ao3Tags: [],
   };
 
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  // 清洗 OCR 文本：去除明显噪声
+  const rawLines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const lines = rawLines.map(l => l.replace(/[|{}[\]~`^<>«»""''…]/g, '').trim()).filter(Boolean);
 
-  // 已知的 AO3 统计/元数据关键词（英文 + 中文），用于排除非内容行
-  const metaKeywords = /^(words|chapters|language|rating|archive|warnings?|category|fandom|series|summary|notes|chapter|entire work|download|bookmark|mark|comments|kudos|hits|collections|published|updated|completed|status|字数|章节|语言|评级|警告|类别|同人圈|系列|摘要|笔记|评论|点赞|点击|收藏|发布|更新|状态)/i;
+  // AO3 已知值（用于分类）
+  const knownRatings = /^(General Audiences|Teen And Up Audiences|Mature|Explicit|Not Rated|普遍级|辅导级|限制级|成人级|未分级)$/i;
+  const knownWarnings = /^(No Archive Warnings Apply|Creator Chose Not To Use Archive Warnings|Graphic Depictions Of Violence|Major Character Death|Rape\/Non-Con|Underage)$/i;
+  const knownCategories = /^(F\/F|M\/M|F\/M|Gen|Multi|Other)$/i;
+  const knownStatus = /^(Completed|In Progress|Work In Progress|WIP|Ongoing|已完结|连载中|进行中|一发完)$/i;
+  const ao3NavNoise  = /^(AO3|Archive of Our Own|Log In|Sign Up|Search|Works|Bookmarks|People|About|Contact|Terms|Privacy|DMCA|Top|Bottom|Previous|Next|Chapter|Entire Work|Download|Comment|Kudos|Bookmark|Mark|Subscribe|Share|Report|Menu|Home)$/i;
 
-  // ====== 第一轮：逐行分类 ======
-  const titleCandidates = [];
-  const authorCandidates = [];
-  const fandomCandidates = [];
+  // 预处理：标记已知的 Rating / Warning / Category 行
+  const knownLines = new Set();
+  const ratingIdx = lines.findIndex(l => knownRatings.test(l));
+  const warningIdx = lines.findIndex(l => knownWarnings.test(l));
+  const categoryIdx = lines.findIndex(l => knownCategories.test(l));
+  if (ratingIdx >= 0) knownLines.add(ratingIdx);
+  if (warningIdx >= 0) knownLines.add(warningIdx);
+  if (categoryIdx >= 0) knownLines.add(categoryIdx);
+
+  // 收集候选
   const cpCandidates = [];
+  const nameCandidates = [];    // 看起来像人名的行
   const tagCandidates = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    if (knownLines.has(i)) continue;
 
-    // 跳过明显的元数据标签行
-    if (metaKeywords.test(line)) {
-      // 但有些行可能同时包含关键词和值，尝试提取值
-      const fandomLabel = line.match(/(?:Fandom|同人圈)[：:\s]*(.+)/i);
-      if (fandomLabel) {
-        fandomCandidates.push(fandomLabel[1].trim());
-      }
-      const wordsVal = line.match(/(?:Words|字数)[：:\s]*([\d,]+)/i);
-      if (wordsVal) result.wordCount = wordsVal[1];
-      const chaptersVal = line.match(/(?:Chapters|章节)[：:\s]*([\d/]+)/i);
-      if (chaptersVal) result.chapters = chaptersVal[1];
+    // 跳过 AO3 导航/UI 噪声
+    if (ao3NavNoise.test(line) && line.length < 20) continue;
+    if (/^(Share|Report)$/i.test(line)) continue;
+
+    // 跳过纯数字或纯符号行
+    if (/^[\d.,/+\-\s×·•]+$/.test(line)) continue;
+
+    // 提取 Words / 字数
+    const wordsMatch = line.match(/(?:Words|字数)\s*[:：]?\s*([\d,]+)/i);
+    if (wordsMatch) { result.wordCount = wordsMatch[1]; continue; }
+
+    // 提取 Chapters / 章节
+    const chMatch = line.match(/(?:Chapters|章节)\s*[:：]?\s*([\d/]+)/i);
+    if (chMatch) { result.chapters = chMatch[1]; continue; }
+
+    // 提取 Language（跳过，不作为 tag）
+    if (/^(Language|语言)\s*[:：]/i.test(line)) continue;
+
+    // 提取 Published / Updated
+    if (/^(Published|Updated|发布|更新)\s*[:：]/i.test(line)) continue;
+
+    // 检测完结状态
+    if (knownStatus.test(line)) {
+      if (/已完结|Completed/i.test(line)) result.completionStatus = '已完结';
+      else if (/连载中|进行中|WIP|In Progress/i.test(line)) result.completionStatus = '连载中';
+      else if (/一发完|One.?Shot/i.test(line)) result.completionStatus = '一发完';
       continue;
     }
 
-    // 跳过纯数字、纯符号行
-    if (/^[\d.,/\-+×\s]+$/.test(line)) continue;
-
-    // 检测 CP / Relationship（含 "/" 但不是日期或章节格式）
-    if (line.includes('/') && !/^\d{1,2}\/\d{1,2}$/.test(line) && !/^\d+\/\d+$/.test(line)) {
-      cpCandidates.push(line);
-      continue;
-    }
-
-    // 检测含下划线的词（AO3 标签特征：Formula_1_RPF, Lando_Norris）
-    const underscoreWords = line.match(/[A-Za-z0-9]+_[A-Za-z0-9]/);
-    if (underscoreWords) {
-      // 可能是 Fandom 或 AO3 标签
-      if (i < 5) {
-        fandomCandidates.push(line);
-      } else {
-        tagCandidates.push(line);
-      }
-      continue;
-    }
-
-    // 检测作者行：以 "by " 开头
-    const byMatch = line.match(/^by\s+(.+)$/i);
-    if (byMatch) {
-      authorCandidates.push(byMatch[1].trim());
-      continue;
-    }
-
-    // 检测纯英文用户名（含下划线、无空格，常见于 AO3 作者名）
-    if (/^[A-Za-z0-9_]{3,30}$/.test(line) && !/^(the|and|for|not|are|you|all|can|has|had|was|see|did|its|his|her)$/i.test(line)) {
-      // 短用户名可能是作者
-      if (i < 6) {
-        authorCandidates.push(line);
+    // 检测 CP / Relationship（含 "/" 且像人名）
+    if (line.includes('/') && !/^\d+\/\d+$/.test(line) && !/^\d{4}\/\d{2}\/\d{2}$/.test(line)) {
+      // 排除像 URL 或纯数字的
+      if (!/^(https?|www)/i.test(line)) {
+        cpCandidates.push(line);
         continue;
       }
     }
 
-    // 检测完结状态
-    if (/已完成|已完结|Complete|Completed/i.test(line)) result.completionStatus = '已完结';
-    if (/连载中|进行中|WIP|In Progress/i.test(line)) result.completionStatus = '连载中';
-    if (/一发完|One[.\s]?Shot/i.test(line)) result.completionStatus = '一发完';
+    // 检测作者行：以 "by " 开头
+    const byMatch = line.match(/^by\s+(.+)/i);
+    if (byMatch) {
+      result.author = byMatch[1].trim();
+      continue;
+    }
 
-    // 检测 Fandom（不含 "/" 和 "by" 的较长行，出现在前部）
-    if (i < 6 && line.length > 3 && line.length < 80) {
-      if (!cpCandidates.includes(line) && !authorCandidates.includes(line)) {
-        fandomCandidates.push(line);
+    // 检测下划线词（AO3 标签特征）
+    if (/[A-Za-z0-9]+_[A-Za-z0-9]+/.test(line)) {
+      tagCandidates.push(line);
+      continue;
+    }
+
+    // 检测纯英文用户名（无空格、3-30 字符）
+    if (/^[A-Za-z0-9_]{3,30}$/.test(line) && !/^(the|and|for|not|are|you|all|can|has|had|was|see|did|its|his|her)$/i.test(line)) {
+      if (!result.author && i < 8) {
+        result.author = line;
+        continue;
       }
     }
 
-    // 标题候选：最前面几行中较长且不像其他元数据的行
-    if (i < 4 && line.length > 2 && line.length < 200) {
-      if (!metaKeywords.test(line) && !/^by\s/i.test(line)) {
-        titleCandidates.push(line);
-      }
-    }
-
-    // 收集可能的 AO3 标签（单独的单词或短语，不在开头）
-    if (i >= 3 && line.length > 2 && line.length < 60) {
-      if (!cpCandidates.includes(line) && !fandomCandidates.includes(line) &&
-          !authorCandidates.includes(line) && !titleCandidates.includes(line)) {
-        if (!/^(the|and|for|not|are|you|all|can|has|had|was|see|did|its|his|her|this|that|with|from|have|been|were|they|them|will|would|could|should|about|there|their)$/i.test(line)) {
-          tagCandidates.push(line);
-        }
+    // 收集其他有意义行作为 tag 候选
+    if (line.length > 2 && line.length < 80) {
+      if (!/^(the|and|for|not|are|you|all|can|has|had|was|see|did|its|his|her|this|that|with|from|have|been|were|they|them|will|would|could|should|about|there|their|also|than|then|just|like|make|made|more|some|only|over|back|into|been|when|what|who|how|why|where|each|every|part|such|much|very|many|long|good|high|even)$/i.test(line)) {
+        tagCandidates.push(line);
       }
     }
   }
 
-  // ====== 第二轮：从候选中选出最佳结果 ======
+  // ====== 第二轮：从候选中提取结果 ======
 
-  // 标题：取 titleCandidates 中第一个有效行
-  if (titleCandidates.length > 0) {
-    // 优先选包含中文或较长的那行
-    const chineseTitle = titleCandidates.find(t => /[一-鿿]/.test(t));
-    result.title = chineseTitle || titleCandidates[0];
+  // Title: 取前几行中最长的候选行（排除 Rating/Warning/Category 和 CP）
+  const topTagLines = tagCandidates.filter(t => t === lines[lines.indexOf(t)] && lines.indexOf(t) < 6);
+  const titleCandidates = [...topTagLines, ...tagCandidates].filter(t =>
+    !cpCandidates.includes(t) && t !== result.author
+  ).filter(t => t.length > 2);
+
+  // 优先选含中文或特殊符号的（书名号等）
+  const chineseTitle = titleCandidates.find(t => /[一-鿿【】「」『』《》]/.test(t));
+  if (chineseTitle) {
+    result.title = chineseTitle;
+    // 从 tagCandidates 中移除标题
+    const ti = tagCandidates.indexOf(chineseTitle);
+    if (ti >= 0) tagCandidates.splice(ti, 1);
+    const tci = titleCandidates.indexOf(chineseTitle);
+    if (tci >= 0) titleCandidates.splice(tci, 1);
+  } else if (titleCandidates.length > 0) {
+    // 选最长的
+    result.title = titleCandidates.reduce((a, b) => a.length >= b.length ? a : b);
   }
 
-  // 作者：优先选 "by" 匹配的，其次选短用户名
-  if (authorCandidates.length > 0) {
-    result.author = authorCandidates[0];
+  // Fandom: 取前几行中像 fandom 的（含关键词 RPF, TV, Movies, Books, 或含 "&"）
+  const fandomPatterns = /(RPF|TV|Movies|Books|Anime|Manga|Cartoons|Video.?Games|Theatre|Music|Celebrities|K-pop|J-pop|C-pop|Bandom)/i;
+  const topLines = tagCandidates.filter(t => lines.indexOf(t) < 5);
+  const fandomFromPattern = topLines.find(t => fandomPatterns.test(t));
+  const fandomFromAmpersand = lines.find(l => /&/.test(l) && l.length > 5 && l.length < 60);
+
+  if (fandomFromPattern) {
+    result.fandom = fandomFromPattern.replace(/_/g, ' ');
+    const fi = tagCandidates.indexOf(fandomFromPattern);
+    if (fi >= 0) tagCandidates.splice(fi, 1);
+  } else if (fandomFromAmpersand && !fandomFromAmpersand.includes('/')) {
+    result.fandom = fandomFromAmpersand.replace(/_/g, ' ');
   } else {
-    // 从 tagCandidates 中找看起来像用户名的（短、纯英文、无空格、可能含下划线）
-    const usernameIdx = tagCandidates.findIndex(t => /^[A-Za-z0-9_]{3,30}$/.test(t));
+    // 取 titleCandidates 中第一个不包含 "/" 的行（排除 title 和 author）
+    const fandomFallback = titleCandidates
+      .concat(tagCandidates)
+      .find(t => t !== result.title && t !== result.author && !t.includes('/') && t.length > 4 && t.length < 60);
+    if (fandomFallback) {
+      result.fandom = fandomFallback.replace(/_/g, ' ');
+    }
+  }
+
+  // CP: 取含 "/" 的最佳候选（优先选包含已知角色的）
+  if (cpCandidates.length > 0) {
+    // 优先选含下划线的（AO3 标签格式），其次选第一个
+    const bestCp = cpCandidates.find(c => /_/.test(c)) || cpCandidates[0];
+    result.cp = bestCp.replace(/_/g, ' ');
+  }
+
+  // Author fallback: 如果还没找到，从 tagCandidates 中找用户名
+  if (!result.author) {
+    const usernameIdx = tagCandidates.findIndex(t => /^[A-Za-z0-9_]{3,30}$/.test(t) && !knownRatings.test(t));
     if (usernameIdx >= 0) {
       result.author = tagCandidates[usernameIdx];
       tagCandidates.splice(usernameIdx, 1);
     }
   }
 
-  // CP：取含 "/" 的行
-  if (cpCandidates.length > 0) {
-    result.cp = cpCandidates[0];
-    // 将下划线还原为空格，便于阅读
-    result.cp = result.cp.replace(/_/g, ' ');
-    result.relationships = [result.cp];
-  }
-
-  // Fandom：取 fandomCandidates 中不含 "/" 的第一个
-  const fandomPick = fandomCandidates.find(f => !f.includes('/') || f === cpCandidates[0]);
-  if (fandomPick) {
-    result.fandom = fandomPick.replace(/_/g, ' ');
-  }
-
-  // AO3 原生标签：剩下的 tagCandidates（排除作者）
+  // AO3 原生标签：清除掉已识别的字段
+  const usedFields = new Set([result.title, result.author, result.fandom, result.cp]);
   result.ao3Tags = tagCandidates
-    .filter(t => t !== result.author && t !== result.fandom && t !== result.title)
+    .filter(t => !usedFields.has(t))
+    .filter(t => t.length > 2)
     .map(t => t.replace(/_/g, ' '));
 
-  // 如果还没找到字数，全文搜一次
+  // 全文兜底搜索 Words / Chapters / Status
   if (!result.wordCount) {
-    const wMatch = text.match(/(?:Words|字数)[：:\s]*([\d,]+)/i);
-    if (wMatch) result.wordCount = wMatch[1];
+    const wm = text.match(/(?:Words|字数)\s*[:：]?\s*([\d,]+)/i);
+    if (wm) result.wordCount = wm[1];
   }
   if (!result.chapters) {
-    const cMatch = text.match(/(?:Chapters|章节)[：:\s]*([\d/]+)/i);
-    if (cMatch) result.chapters = cMatch[1];
+    const cm = text.match(/(?:Chapters|章节)\s*[:：]?\s*([\d/]+)/i);
+    if (cm) result.chapters = cm[1];
   }
-
-  // 从章节推断完结状态
   if (!result.completionStatus && result.chapters) {
     const parts = result.chapters.split('/');
     if (parts.length === 2) {
-      if (parts[0] === parts[1]) {
-        result.completionStatus = parts[0] === '1' ? '一发完' : '已完结';
-      } else {
-        result.completionStatus = '连载中';
-      }
+      result.completionStatus = parts[0] === parts[1] ? (parts[0] === '1' ? '一发完' : '已完结') : '连载中';
     }
+  }
+
+  // 如果还没状态，全文搜
+  if (!result.completionStatus) {
+    if (/Completed|已完结/i.test(text)) result.completionStatus = '已完结';
+    else if (/In Progress|WIP|连载中|进行中/i.test(text)) result.completionStatus = '连载中';
+    else if (/One.?Shot|一发完/i.test(text)) result.completionStatus = '一发完';
   }
 
   return result;
