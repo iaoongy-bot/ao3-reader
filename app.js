@@ -1084,10 +1084,25 @@ function extractFieldsFromOCR(text) {
       }
     }
 
-    // 检测作者行：以 "by " 开头
+    // 检测作者行：以 "by " 开头，或 "by " 出现在行中
     const byMatch = line.match(/^by\s+(.+)/i);
+    const inlineByMatch = line.match(/\s+by\s+(.+)$/i);
     if (byMatch) {
       result.author = byMatch[1].trim();
+      // 标题 = by 前面那行
+      const prevLine = lines[i - 1];
+      if (prevLine && !knownRatings.test(prevLine) && !knownWarnings.test(prevLine) && !knownCategories.test(prevLine)) {
+        result.title = prevLine;
+      }
+      continue;
+    }
+    if (inlineByMatch) {
+      // "Title by Author" 在同一行 — OCR 把标题和作者合并了
+      const titlePart = line.slice(0, line.lastIndexOf(inlineByMatch[0])).trim();
+      result.author = inlineByMatch[1].trim();
+      if (titlePart && !knownRatings.test(titlePart)) {
+        result.title = titlePart;
+      }
       continue;
     }
 
@@ -1115,25 +1130,21 @@ function extractFieldsFromOCR(text) {
 
   // ====== 第二轮：从候选中提取结果 ======
 
-  // Title: 取前几行中最长的候选行（排除 Rating/Warning/Category 和 CP）
-  const topTagLines = tagCandidates.filter(t => t === lines[lines.indexOf(t)] && lines.indexOf(t) < 6);
-  const titleCandidates = [...topTagLines, ...tagCandidates].filter(t =>
-    !cpCandidates.includes(t) && t !== result.author
-  ).filter(t => t.length > 2);
-
-  // 优先选含中文或特殊符号的（书名号等）
-  const chineseTitle = titleCandidates.find(t => /[一-鿿【】「」『』《》]/.test(t));
-  if (chineseTitle) {
-    result.title = chineseTitle;
-    // 从 tagCandidates 中移除标题
-    const ti = tagCandidates.indexOf(chineseTitle);
-    if (ti >= 0) tagCandidates.splice(ti, 1);
-    const tci = titleCandidates.indexOf(chineseTitle);
-    if (tci >= 0) titleCandidates.splice(tci, 1);
-  } else if (titleCandidates.length > 0) {
-    // 选最长的
-    result.title = titleCandidates.reduce((a, b) => a.length >= b.length ? a : b);
+  // Title 兜底：如果第一轮没通过 "by" 找到，从最前面的候选行中选
+  if (!result.title) {
+    const topCandidates = lines.slice(0, Math.min(6, lines.length)).filter(l =>
+      l.length > 2 && l.length < 200 &&
+      !knownRatings.test(l) && !knownWarnings.test(l) && !knownCategories.test(l) &&
+      !knownLines.has(lines.indexOf(l)) && !cpCandidates.includes(l) && l !== result.author
+    );
+    if (topCandidates.length > 0) {
+      result.title = topCandidates[0];
+    }
   }
+
+  // 从 tagCandidates 中移除已作为 title 的行
+  const ti = tagCandidates.indexOf(result.title);
+  if (ti >= 0) tagCandidates.splice(ti, 1);
 
   // Fandom: 取前几行中像 fandom 的（含关键词 RPF, TV, Movies, Books, 或含 "&"）
   const fandomPatterns = /(RPF|TV|Movies|Books|Anime|Manga|Cartoons|Video.?Games|Theatre|Music|Celebrities|K-pop|J-pop|C-pop|Bandom)/i;
@@ -1148,9 +1159,8 @@ function extractFieldsFromOCR(text) {
   } else if (fandomFromAmpersand && !fandomFromAmpersand.includes('/')) {
     result.fandom = fandomFromAmpersand.replace(/_/g, ' ');
   } else {
-    // 取 titleCandidates 中第一个不包含 "/" 的行（排除 title 和 author）
-    const fandomFallback = titleCandidates
-      .concat(tagCandidates)
+    // 取前几行中第一个不包含 "/" 的行（排除 title 和 author）
+    const fandomFallback = tagCandidates
       .find(t => t !== result.title && t !== result.author && !t.includes('/') && t.length > 4 && t.length < 60);
     if (fandomFallback) {
       result.fandom = fandomFallback.replace(/_/g, ' ');
