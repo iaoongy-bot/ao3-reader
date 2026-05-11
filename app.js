@@ -62,30 +62,44 @@ async function deleteFromBackend(id) {
 
 // ========== 数据读写 ==========
 
-async function loadNotes() {
-  // 先尝试从后端同步
-  const remote = await syncFromBackend();
-  if (remote && remote.length > 0) {
-    notes = remote;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-    return;
-  }
-
-  // 回退到 localStorage
+function loadNotes() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     notes = raw ? JSON.parse(raw) : [];
   } catch (e) {
     notes = [];
   }
+}
 
-  // 如果本地有数据但后端为空，把本地数据推送到后端
-  if (notes.length > 0) {
-    backendAvailable = true;
-    for (const n of notes) {
-      await syncToBackend(n);
+async function syncFromBackendInBackground() {
+  const remote = await syncFromBackend();
+  if (!remote || remote.length === 0) {
+    // 本地有数据但后端为空，把本地数据推送到后端
+    if (notes.length > 0) {
+      backendAvailable = true;
+      for (const n of notes) {
+        await syncToBackend(n);
+      }
+    }
+    return;
+  }
+
+  // 合并：以后端为主，本地数据补充（以 updatedAt 为准）
+  const localMap = new Map(notes.map(n => [n.id, n]));
+  const remoteMap = new Map(remote.map(n => [n.id, n]));
+
+  for (const [id, local] of localMap) {
+    const remoteNote = remoteMap.get(id);
+    if (!remoteNote) {
+      remoteMap.set(id, local);
+    } else if (new Date(local.updatedAt) > new Date(remoteNote.updatedAt)) {
+      remoteMap.set(id, local);
     }
   }
+
+  notes = Array.from(remoteMap.values());
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+  renderBookshelf();
 }
 
 function saveNotes() {
@@ -1190,8 +1204,9 @@ function fillFormFromOCRData(data) {
 // 初始化
 // ================================================================
 
-async function init() {
-  await loadNotes();
+function init() {
+  // 即时从 localStorage 加载并渲染
+  loadNotes();
 
   // 设置默认日期
   $inputDate.value = new Date().toISOString().split('T')[0];
@@ -1199,6 +1214,9 @@ async function init() {
   // 初始渲染
   showView('bookshelf');
   renderBookshelf();
+
+  // 后台异步同步后端（不阻塞渲染）
+  syncFromBackendInBackground();
 
   // 添加 shake 动画
   const style = document.createElement('style');
