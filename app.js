@@ -3,7 +3,7 @@
    ================================================================ */
 
 const STORAGE_KEY = 'ao3_reading_notes';
-const API_KEY = 'ao3-reader-secret-key';
+const API_KEY = 'ao3-reader-2026-jiao';
 let notes = [];
 let currentView = 'bookshelf';
 let editingId = null;
