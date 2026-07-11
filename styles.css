@@ -76,23 +76,35 @@ body {
   color: var(--text);
   display: flex;
   align-items: center;
-  padding: 12px 16px;
+  padding: 15px 18px 13px;
   gap: 12px;
-  min-height: 52px;
+  min-height: 68px;
   border-bottom: 1px solid var(--border);
   box-shadow: none;
   backdrop-filter: blur(14px);
 }
 
 #header-title {
-  font-size: 1.15rem;
+  font-size: 1.2rem;
   font-weight: 600;
   font-family: Georgia, "Songti SC", "STSong", serif;
-  flex: 1;
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.header-copy {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+#header-subtitle {
+  margin-top: 1px;
+  color: var(--text-light);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
 }
 
 #header-actions {
@@ -117,13 +129,25 @@ body {
 }
 
 .icon-btn:active {
-  background: rgba(255,255,255,0.2);
+  background: var(--ao3-red-light);
 }
 
 /* ========== 视图容器 ========== */
 .view {
   padding: 16px;
   padding-bottom: calc(80px + var(--safe-bottom));
+}
+
+#bookshelf-view,
+#form-view,
+#detail-view {
+  width: calc(100% - 24px);
+  margin: 12px;
+  padding: 18px 18px calc(80px + var(--safe-bottom));
+  background: rgba(255,253,249,0.86);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
 }
 
 /* ========== 搜索栏 ========== */
@@ -369,26 +393,43 @@ body {
 .books-container {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
+  border-top: 1px solid var(--border);
 }
 
 .book-card {
-  background: var(--bg-card);
-  border-radius: var(--radius);
-  padding: 17px 17px 16px 20px;
-  box-shadow: var(--shadow);
+  background: transparent;
+  border-radius: 0;
+  padding: 18px 4px 18px 20px;
+  box-shadow: none;
   cursor: pointer;
-  border: 1px solid var(--border);
-  border-left: 3px solid #c68b95;
+  border: 0;
+  border-bottom: 1px solid var(--border);
   transition: transform 0.15s;
   position: relative;
 }
 
-.book-card:active {
-  transform: scale(0.98);
+.book-card::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 20px;
+  bottom: 20px;
+  width: 3px;
+  border-radius: 3px;
+  background: #c68b95;
 }
 
-.book-card.rating-0 { border-left-color: var(--border); }
+.book-card.rating-0::before {
+  background: var(--border);
+}
+
+.book-card:active {
+  transform: none;
+  background: rgba(127,37,55,0.035);
+}
+
+.book-card.rating-0 { border-left-color: transparent; }
 
 .card-header {
   display: flex;
@@ -558,12 +599,14 @@ body {
   position: fixed;
   bottom: calc(24px + var(--safe-bottom));
   right: 20px;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
+  width: auto;
+  height: 48px;
+  border-radius: 24px;
   background: var(--ao3-red);
   color: #fff;
-  font-size: 2rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0 18px;
   border: none;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(153,0,0,0.35);
@@ -573,6 +616,12 @@ body {
   z-index: 90;
   transition: transform 0.2s, box-shadow 0.2s;
   line-height: 1;
+  gap: 4px;
+}
+
+.fab span {
+  font-size: 1.2rem;
+  font-weight: 400;
 }
 
 .fab:active {
@@ -589,6 +638,12 @@ body {
 /* ========== 表单 ========== */
 .form-section {
   margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.form-section:last-of-type {
+  border-bottom: 0;
 }
 
 .form-label {
@@ -972,10 +1027,10 @@ button:focus-visible {
 
 /* ========== 详情页 ========== */
 .detail-content {
-  background: var(--bg-card);
-  border-radius: var(--radius);
-  padding: 20px;
-  box-shadow: var(--shadow);
+  background: transparent;
+  border-radius: 0;
+  padding: 2px;
+  box-shadow: none;
   margin-bottom: 20px;
 }
 
@@ -1126,7 +1181,8 @@ button:focus-visible {
   }
 
   .book-card:hover {
-    box-shadow: var(--shadow-lg);
+    box-shadow: none;
+    background: rgba(127,37,55,0.025);
   }
 
   .filter-toggle {

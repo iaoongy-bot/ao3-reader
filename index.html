@@ -12,7 +12,10 @@
     <!-- ========== 顶部导航栏 ========== -->
     <header id="app-header">
       <button id="btn-back" class="icon-btn" aria-label="返回">←</button>
-      <h1 id="header-title">我的阅读手账</h1>
+      <div class="header-copy">
+        <h1 id="header-title">我的阅读手账</h1>
+        <p id="header-subtitle">AO3 · 私人收藏</p>
+      </div>
       <div id="header-actions"></div>
     </header>
 
@@ -106,7 +109,7 @@
       </div>
 
       <!-- 浮动添加按钮 -->
-      <button id="btn-add" class="fab" aria-label="添加记录">+</button>
+      <button id="btn-add" class="fab" aria-label="添加记录"><span aria-hidden="true">＋</span> 记一篇</button>
     </main>
 
     <!-- ========== 添加/编辑页 ========== -->

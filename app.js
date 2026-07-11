@@ -174,6 +174,7 @@ const $formView = document.getElementById('form-view');
 const $detailView = document.getElementById('detail-view');
 const $loginView = document.getElementById('login-view');
 const $headerTitle = document.getElementById('header-title');
+const $headerSubtitle = document.getElementById('header-subtitle');
 const $btnBack = document.getElementById('btn-back');
 const $headerActions = document.getElementById('header-actions');
 
@@ -186,21 +187,25 @@ function showView(view) {
 
   if (view === 'login') {
     $headerTitle.textContent = '📖 AO3 读后感';
+    $headerSubtitle.style.display = 'none';
     $btnBack.style.display = 'none';
     $headerActions.innerHTML = '';
     $btnAdd.style.display = 'none';
   } else if (view === 'bookshelf') {
     $headerTitle.textContent = '我的阅读手账';
+    $headerSubtitle.style.display = '';
     $btnBack.style.display = 'none';
     renderHeaderActions();
     $btnAdd.style.display = '';
   } else if (view === 'form') {
     $headerTitle.textContent = editingId ? '编辑记录' : '添加记录';
+    $headerSubtitle.style.display = 'none';
     $btnBack.style.display = '';
     renderHeaderActions();
     $btnAdd.style.display = 'none';
   } else if (view === 'detail') {
     $headerTitle.textContent = '文章详情';
+    $headerSubtitle.style.display = 'none';
     $btnBack.style.display = '';
     renderHeaderActions();
     $btnAdd.style.display = 'none';
