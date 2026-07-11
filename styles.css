@@ -785,6 +785,15 @@ select {
   gap: 8px;
 }
 
+.ocr-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ocr-actions button {
+  white-space: nowrap;
+}
+
 .ocr-preview-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1252,6 +1261,11 @@ button:focus-visible {
 @media (max-width: 380px) {
   .ocr-controls {
     grid-template-columns: 1fr;
+  }
+
+  .ocr-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 }
 

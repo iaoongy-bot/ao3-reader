@@ -133,7 +133,7 @@
       <!-- 截图上传区（链接获取失败后显示） -->
       <section id="ocr-section" class="form-section" style="display:none">
         <label class="form-label">截图识别</label>
-        <p class="form-help">可一次选择 1–3 张截图，建议覆盖标题、作者和作品信息区域</p>
+        <p class="form-help">可逐张添加，最多 3 张；添加完成后再开始识别</p>
         <div class="ocr-area">
           <input type="file" id="input-screenshot" accept="image/*" multiple style="display:none">
           <div class="ocr-controls">
@@ -142,7 +142,10 @@
               <option value="eng">英文优先（推荐）</option>
               <option value="chi_sim+eng">中英混合</option>
             </select>
-            <button id="btn-upload-screenshot" class="btn-outline btn-sm">📷 选择 1–3 张截图</button>
+            <div class="ocr-actions">
+              <button id="btn-upload-screenshot" class="btn-outline btn-sm">📷 添加截图</button>
+              <button id="btn-start-ocr" class="btn-primary btn-sm" style="display:none">开始识别</button>
+            </div>
           </div>
           <div id="ocr-preview" class="ocr-preview-grid" style="display:none"></div>
           <div id="ocr-progress" class="ocr-progress" style="display:none">
@@ -318,6 +321,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
-  <script src="app.js?v=20260711-6"></script>
+  <script src="app.js?v=20260711-7"></script>
 </body>
 </html>

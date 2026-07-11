@@ -705,6 +705,7 @@ const $fetchStatus = document.getElementById('fetch-status');
 const $ocrSection = document.getElementById('ocr-section');
 const $inputScreenshot = document.getElementById('input-screenshot');
 const $btnUploadScreenshot = document.getElementById('btn-upload-screenshot');
+const $btnStartOcr = document.getElementById('btn-start-ocr');
 const $ocrPreview = document.getElementById('ocr-preview');
 const $ocrLanguage = document.getElementById('ocr-language');
 const $ocrProgress = document.getElementById('ocr-progress');
@@ -1230,23 +1231,30 @@ function showFetchStatus(msg, type) {
 // ================================================================
 
 function resetOcrButton() {
-  $btnUploadScreenshot.textContent = '📷 选择 1–3 张截图';
+  pendingOcrFiles = [];
+  $btnUploadScreenshot.textContent = '📷 添加截图';
   $btnUploadScreenshot.style.display = '';
+  $btnUploadScreenshot.disabled = false;
+  $btnStartOcr.style.display = 'none';
   $ocrPreview.style.display = 'none';
   $ocrPreview.innerHTML = '';
   $ocrProgress.style.display = 'none';
 }
 
 $btnUploadScreenshot.addEventListener('click', () => {
+  if (pendingOcrFiles.length >= 3) return;
+  $inputScreenshot.value = '';
   $inputScreenshot.click();
 });
 
-$inputScreenshot.addEventListener('change', async (e) => {
-  const files = Array.from(e.target.files || []).slice(0, 3);
-  if (files.length === 0) return;
+let pendingOcrFiles = [];
 
+$inputScreenshot.addEventListener('change', (e) => {
+  const selected = Array.from(e.target.files || []);
+  if (selected.length === 0) return;
+  pendingOcrFiles = pendingOcrFiles.concat(selected).slice(0, 3);
   $ocrPreview.innerHTML = '';
-  files.forEach((file, index) => {
+  pendingOcrFiles.forEach((file, index) => {
     const img = document.createElement('img');
     img.alt = `截图 ${index + 1} 预览`;
     img.src = URL.createObjectURL(file);
@@ -1254,9 +1262,20 @@ $inputScreenshot.addEventListener('change', async (e) => {
     $ocrPreview.appendChild(img);
   });
   $ocrPreview.style.display = 'grid';
+  $btnStartOcr.style.display = '';
+  $btnStartOcr.textContent = `识别这 ${pendingOcrFiles.length} 张`;
+  $btnUploadScreenshot.textContent = pendingOcrFiles.length < 3 ? '＋ 继续添加' : '已添加 3 张';
+  $btnUploadScreenshot.disabled = pendingOcrFiles.length >= 3;
+  $inputScreenshot.value = '';
+});
+
+$btnStartOcr.addEventListener('click', async () => {
+  const files = [...pendingOcrFiles];
+  if (files.length === 0) return;
 
   // 加载 Tesseract
   $btnUploadScreenshot.style.display = 'none';
+  $btnStartOcr.style.display = 'none';
   $ocrProgress.style.display = '';
   $ocrProgressText.textContent = '正在加载识别引擎...';
   $ocrProgressBar.value = 0;
