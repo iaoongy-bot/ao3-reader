@@ -255,6 +255,7 @@ const $filterRating = document.getElementById('filter-rating');
 const $filterBar = document.getElementById('filter-bar');
 const $btnFilterToggle = document.getElementById('btn-filter-toggle');
 const $filterStatus = document.getElementById('filter-status');
+const $filterCp = document.getElementById('filter-cp');
 const $sortBy = document.getElementById('sort-by');
 const $resultCount = document.getElementById('result-count');
 const $btnViewCard = document.getElementById('btn-view-card');
@@ -346,17 +347,17 @@ function getCps(cpValue) {
     .filter(Boolean);
 }
 
-function getUniqueCps(fandom) {
+function getCpStats(fandom) {
   const counts = new Map();
   notes.forEach(n => {
     if (fandom && n.fandom !== fandom) return;
-    getCps(n.cp).forEach(cp => {
+    new Set(getCps(n.cp)).forEach(cp => {
       counts.set(cp, (counts.get(cp) || 0) + 1);
     });
   });
   return [...counts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-CN'))
-    .map(([cp]) => cp);
+    .map(([cp, count]) => ({ cp, count }));
 }
 
 function buildFandomTabs() {
@@ -391,10 +392,13 @@ function buildFandomTabs() {
 }
 
 function updateCpFilter() {
-  const cps = getUniqueCps(activeFandom);
+  const cpStats = getCpStats(activeFandom);
+  const cps = cpStats.map(item => item.cp);
   if (activeCp !== 'all' && !cps.includes(activeCp)) activeCp = 'all';
+
+  $cpTabs.style.display = activeFandom ? 'flex' : 'none';
   let html = `<button class="cp-tab${activeCp === 'all' ? ' active' : ''}" data-cp="all">全部 CP</button>`;
-  cps.forEach(cp => {
+  cpStats.forEach(({ cp }) => {
     const active = activeCp === cp ? ' active' : '';
     html += `<button class="cp-tab${active}" data-cp="${escapeAttribute(cp)}" title="${escapeAttribute(cp)}">${escapeHtml(cp)}</button>`;
   });
@@ -410,6 +414,13 @@ function updateCpFilter() {
       renderBookshelf();
     });
   });
+
+  let selectHtml = '<option value="all">全部 CP</option>';
+  cpStats.forEach(({ cp, count }) => {
+    selectHtml += `<option value="${escapeAttribute(cp)}">${escapeHtml(cp)}（${count}篇）</option>`;
+  });
+  $filterCp.innerHTML = selectHtml;
+  $filterCp.value = activeCp;
 }
 
 function renderHeartIcons(rating) {
@@ -577,6 +588,10 @@ $btnSearchClear.addEventListener('click', () => {
 // 筛选事件
 $filterRating.addEventListener('change', () => renderBookshelf());
 $filterStatus.addEventListener('change', () => renderBookshelf());
+$filterCp.addEventListener('change', () => {
+  activeCp = $filterCp.value;
+  renderBookshelf();
+});
 $sortBy.addEventListener('change', () => renderBookshelf());
 
 $btnFilterToggle.addEventListener('click', () => {
