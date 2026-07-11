@@ -408,6 +408,27 @@ function truncateText(text, maxLen) {
   return text.slice(0, maxLen) + '...';
 }
 
+function getPrimaryCp(cpValue) {
+  return String(cpValue || '')
+    .split(/[,，;；\n]/)[0]
+    .trim()
+    .toLocaleLowerCase('zh-CN')
+    .replace(/\s+/g, ' ');
+}
+
+function getCpAccentColor(cpValue) {
+  const primaryCp = getPrimaryCp(cpValue);
+  if (!primaryCp) return '';
+  let hash = 0;
+  for (const char of primaryCp) {
+    hash = ((hash * 31) + char.codePointAt(0)) >>> 0;
+  }
+  const hue = hash % 360;
+  const saturation = 18 + ((hash >>> 8) % 7);
+  const lightness = 58 + ((hash >>> 16) % 7);
+  return `hsl(${hue} ${saturation}% ${lightness}%)`;
+}
+
 function renderBookshelf() {
   buildFandomTabs();
   updateCpFilter();
@@ -429,6 +450,9 @@ function renderBookshelf() {
 function createBookCard(note) {
   const card = document.createElement('div');
   card.className = `book-card rating-${note.rating}`;
+  const cpAccentColor = getCpAccentColor(note.cp);
+  if (cpAccentColor) card.style.borderLeftColor = cpAccentColor;
+  else card.classList.add('no-cp');
   card.tabIndex = 0;
   card.setAttribute('role', 'button');
   card.setAttribute('aria-label', `打开《${note.title || '未命名'}》详情`);

@@ -413,6 +413,7 @@ body {
 }
 
 .book-card.rating-0 { border-left-color: var(--border); }
+.book-card.no-cp { border-left-color: var(--border); }
 
 .card-header {
   display: flex;
