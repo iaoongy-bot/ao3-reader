@@ -157,6 +157,16 @@ body {
   box-shadow: none;
 }
 
+#form-view {
+  width: calc(100% - 28px);
+  margin: 14px;
+  padding: 24px 20px calc(72px + var(--safe-bottom));
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+
 /* ========== 搜索栏 ========== */
 .search-tools {
   display: grid;
@@ -630,8 +640,8 @@ body {
 
 /* ========== 表单 ========== */
 .form-section {
-  margin-bottom: 20px;
-  padding-bottom: 20px;
+  margin-bottom: 26px;
+  padding-bottom: 26px;
   border-bottom: 1px dashed var(--border);
 }
 
@@ -644,7 +654,11 @@ body {
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--text);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.form-section > .form-label:not(:first-child) {
+  margin-top: 18px;
 }
 
 .required {
@@ -659,7 +673,7 @@ input[type="date"],
 select,
 textarea {
   width: 100%;
-  padding: 10px 14px;
+  padding: 12px 14px;
   font-size: 0.95rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
