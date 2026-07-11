@@ -95,8 +95,13 @@ body {
 
 .header-copy {
   grid-column: 2;
+  position: absolute;
+  left: 50%;
+  width: calc(100% - 180px);
+  transform: translateX(-50%);
   min-width: 0;
   text-align: center;
+  pointer-events: none;
 }
 
 #header-subtitle {
