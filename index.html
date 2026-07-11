@@ -37,8 +37,9 @@
 
       <!-- 搜索栏 -->
       <div class="search-bar">
-        <input type="text" id="search-input" placeholder="搜索标题或作者..." autocomplete="off">
-        <button id="btn-search-clear" class="clear-btn" style="display:none">✕</button>
+        <label class="sr-only" for="search-input">搜索书架</label>
+        <input type="search" id="search-input" placeholder="搜索标题、作者、CP、标签或读后感..." autocomplete="off">
+        <button id="btn-search-clear" class="clear-btn" aria-label="清除搜索" style="display:none">✕</button>
       </div>
 
       <!-- Fandom 书架标签栏 -->
@@ -48,7 +49,7 @@
 
       <!-- 筛选栏 -->
       <div class="filter-bar">
-        <select id="filter-rating" class="filter-select">
+        <select id="filter-rating" class="filter-select" aria-label="按评分筛选">
           <option value="all">全部评分</option>
           <option value="5">⭐ 5星</option>
           <option value="4">⭐ 4星</option>
@@ -57,16 +58,16 @@
           <option value="1">⭐ 1星</option>
           <option value="0">未评分</option>
         </select>
-        <select id="filter-status" class="filter-select">
+        <select id="filter-status" class="filter-select" aria-label="按完结状态筛选">
           <option value="all">全部状态</option>
           <option value="已完结">已完结</option>
           <option value="连载中">连载中</option>
           <option value="一发完">一发完</option>
         </select>
-        <select id="filter-cp" class="filter-select">
+        <select id="filter-cp" class="filter-select" aria-label="按 CP 筛选">
           <option value="all">全部 CP</option>
         </select>
-        <select id="sort-by" class="filter-select">
+        <select id="sort-by" class="filter-select" aria-label="排序方式">
           <option value="date-desc">按阅读日期 ↓</option>
           <option value="date-asc">按阅读日期 ↑</option>
           <option value="rating-desc">按评分 ↓</option>
@@ -175,11 +176,11 @@
       <section class="form-section">
         <label class="form-label">个人评分</label>
         <div id="star-rating" class="star-rating">
-          <span class="star" data-rating="1">☆</span>
-          <span class="star" data-rating="2">☆</span>
-          <span class="star" data-rating="3">☆</span>
-          <span class="star" data-rating="4">☆</span>
-          <span class="star" data-rating="5">☆</span>
+          <button type="button" class="star" data-rating="1" aria-label="1 星">☆</button>
+          <button type="button" class="star" data-rating="2" aria-label="2 星">☆</button>
+          <button type="button" class="star" data-rating="3" aria-label="3 星">☆</button>
+          <button type="button" class="star" data-rating="4" aria-label="4 星">☆</button>
+          <button type="button" class="star" data-rating="5" aria-label="5 星">☆</button>
         </div>
       </section>
 
@@ -245,8 +246,8 @@
 
     <!-- ========== 删除确认弹窗 ========== -->
     <div id="confirm-dialog" class="dialog-overlay" style="display:none">
-      <div class="dialog">
-        <p>确定要删除这条记录吗？</p>
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title">
+        <p id="delete-dialog-title">确定要删除这条记录吗？</p>
         <p class="dialog-warning">删除后无法恢复</p>
         <div class="dialog-actions">
           <button id="btn-confirm-delete" class="btn-danger">确认删除</button>

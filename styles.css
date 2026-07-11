@@ -28,6 +28,18 @@
   padding: 0;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 html {
   font-size: 16px;
   -webkit-text-size-adjust: 100%;
@@ -676,8 +688,19 @@ select {
   font-size: 2rem;
   cursor: pointer;
   color: #ddd;
+  background: none;
+  border: 0;
+  padding: 0 2px;
+  font-family: inherit;
   transition: color 0.15s, transform 0.15s;
   user-select: none;
+}
+
+.star-rating .star:focus-visible,
+.book-card:focus-visible,
+button:focus-visible {
+  outline: 3px solid rgba(153,0,0,0.28);
+  outline-offset: 2px;
 }
 
 .star-rating .star.active {
@@ -727,6 +750,10 @@ select {
   font-size: 0.85rem;
   line-height: 1;
   opacity: 0.6;
+  border: 0;
+  background: none;
+  color: inherit;
+  padding: 2px;
 }
 
 .tag-remove:active {

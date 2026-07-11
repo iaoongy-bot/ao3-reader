@@ -4,6 +4,7 @@
 
 const STORAGE_KEY = 'ao3_reading_notes';
 const PENDING_SYNC_KEY = 'ao3_pending_sync_operations';
+const DRAFT_KEY = 'ao3_note_draft';
 let notes = [];
 let currentView = 'bookshelf';
 let editingId = null;
@@ -207,7 +208,7 @@ function showView(view) {
 }
 
 function renderHeaderActions() {
-  $headerActions.innerHTML = '<button id="sync-status" class="sync-status" type="button" title="点击立即同步">云端</button>';
+  $headerActions.innerHTML = '<button id="sync-status" class="sync-status" type="button" title="点击立即同步" aria-live="polite">云端</button>';
   document.getElementById('sync-status').addEventListener('click', syncWithCloud);
 }
 
@@ -219,7 +220,11 @@ function updateSyncStatus(text, isError = false) {
 }
 
 $btnBack.addEventListener('click', () => {
-  if (currentView === 'form' || currentView === 'detail') {
+  if (currentView === 'form') {
+    if (!confirmLeaveForm()) return;
+    showView('bookshelf');
+    renderBookshelf();
+  } else if (currentView === 'detail') {
     showView('bookshelf');
     renderBookshelf();
   }
@@ -275,10 +280,11 @@ function getFilteredNotes() {
   // 搜索
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
-    result = result.filter(n =>
-      n.title.toLowerCase().includes(q) ||
-      n.author.toLowerCase().includes(q)
-    );
+    result = result.filter(n => [
+      n.title, n.author, n.fandom, n.cp, n.notes, n.workId,
+      ...(Array.isArray(n.ao3Tags) ? n.ao3Tags : []),
+      ...(Array.isArray(n.privateTags) ? n.privateTags : []),
+    ].some(value => String(value || '').toLowerCase().includes(q)));
   }
 
   // 评分筛选
@@ -297,8 +303,8 @@ function getFilteredNotes() {
   // 标签筛选
   if (activeTagFilter) {
     result = result.filter(n =>
-      n.ao3Tags.includes(activeTagFilter) ||
-      n.privateTags.includes(activeTagFilter)
+      (Array.isArray(n.ao3Tags) && n.ao3Tags.includes(activeTagFilter)) ||
+      (Array.isArray(n.privateTags) && n.privateTags.includes(activeTagFilter))
     );
   }
 
@@ -306,10 +312,10 @@ function getFilteredNotes() {
   const sortVal = $sortBy.value;
   switch (sortVal) {
     case 'date-desc':
-      result.sort((a, b) => b.readingDate.localeCompare(a.readingDate));
+      result.sort((a, b) => String(b.readingDate || '').localeCompare(String(a.readingDate || '')));
       break;
     case 'date-asc':
-      result.sort((a, b) => a.readingDate.localeCompare(b.readingDate));
+      result.sort((a, b) => String(a.readingDate || '').localeCompare(String(b.readingDate || '')));
       break;
     case 'rating-desc':
       result.sort((a, b) => b.rating - a.rating);
@@ -419,7 +425,16 @@ function renderBookshelf() {
 function createBookCard(note) {
   const card = document.createElement('div');
   card.className = `book-card rating-${note.rating}`;
+  card.tabIndex = 0;
+  card.setAttribute('role', 'button');
+  card.setAttribute('aria-label', `打开《${note.title || '未命名'}》详情`);
   card.addEventListener('click', () => openDetail(note.id));
+  card.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openDetail(note.id);
+    }
+  });
 
   const starsHtml = renderStarIcons(note.rating);
 
@@ -567,20 +582,23 @@ $inputImportFile.addEventListener('change', () => {
     try {
       const imported = JSON.parse(reader.result);
       if (!Array.isArray(imported)) throw new Error('格式错误');
+      const validNotes = imported.map(normalizeImportedNote).filter(Boolean);
+      if (validNotes.length === 0 && imported.length > 0) throw new Error('没有有效记录');
       // 合并：以 id 去重，导入的覆盖已有
       const map = new Map(notes.map(n => [n.id, n]));
-      imported.forEach(n => { if (n.id) map.set(n.id, n); });
+      validNotes.forEach(n => map.set(n.id, n));
       notes = Array.from(map.values());
       saveNotes();
       // 加入云端同步队列
-      imported.forEach(n => {
+      validNotes.forEach(n => {
         const updatedAt = n.updatedAt || new Date().toISOString();
         n.updatedAt = updatedAt;
         queueSyncOperation({ type: 'upsert', id: n.id, note: n, updatedAt });
       });
       syncWithCloud();
       renderBookshelf();
-      alert(`成功导入 ${imported.length} 条记录`);
+      const skipped = imported.length - validNotes.length;
+      alert(`成功导入 ${validNotes.length} 条记录${skipped ? `，跳过 ${skipped} 条无效数据` : ''}`);
     } catch (e) {
       alert('导入失败：文件格式不正确');
     }
@@ -589,10 +607,34 @@ $inputImportFile.addEventListener('change', () => {
   $inputImportFile.value = '';
 });
 
+function normalizeImportedNote(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const title = typeof value.title === 'string' ? value.title.trim().slice(0, 500) : '';
+  const author = typeof value.author === 'string' ? value.author.trim().slice(0, 300) : '';
+  if (!title || !author) return null;
+  const stringValue = (key, max = 5000) => typeof value[key] === 'string' ? value[key].slice(0, max) : '';
+  const tagList = key => Array.isArray(value[key])
+    ? value[key].filter(tag => typeof tag === 'string').map(tag => tag.trim().slice(0, 200)).filter(Boolean).slice(0, 200)
+    : [];
+  const updatedAt = Number.isFinite(Date.parse(value.updatedAt)) ? value.updatedAt : new Date().toISOString();
+  return {
+    id: typeof value.id === 'string' && value.id ? value.id.slice(0, 200) : generateId(),
+    ao3Url: safeAo3Url(value.ao3Url), title, author,
+    fandom: stringValue('fandom', 500), cp: stringValue('cp', 500),
+    wordCount: stringValue('wordCount', 100), completionStatus: stringValue('completionStatus', 30),
+    workId: stringValue('workId', 100), rating: Math.min(5, Math.max(0, Number(value.rating) || 0)),
+    ao3Tags: tagList('ao3Tags'), privateTags: tagList('privateTags'),
+    notes: stringValue('notes', 100000), readingDate: stringValue('readingDate', 20),
+    createdAt: Number.isFinite(Date.parse(value.createdAt)) ? value.createdAt : updatedAt,
+    updatedAt,
+  };
+}
+
 // 添加按钮
 $btnAdd.addEventListener('click', () => {
   editingId = null;
   resetForm();
+  restoreDraft();
   showView('form');
 });
 
@@ -630,6 +672,81 @@ const $btnCancelForm = document.getElementById('btn-cancel-form');
 let formRating = 0;
 let formAo3Tags = [];
 let formPrivateTags = [];
+let formBaseline = '';
+let draftTimer = null;
+
+function captureFormState() {
+  return {
+    editingId,
+    ao3Url: $inputAo3Url.value,
+    title: $inputTitle.value,
+    author: $inputAuthor.value,
+    fandom: $inputFandom.value,
+    cp: $inputCp.value,
+    wordCount: $inputWordcount.value,
+    completionStatus: $inputStatus.value,
+    workId: $inputWorkId.value,
+    readingDate: $inputDate.value,
+    notes: $inputNotes.value,
+    rating: formRating,
+    ao3Tags: [...formAo3Tags],
+    privateTags: [...formPrivateTags],
+  };
+}
+
+function markFormBaseline() {
+  formBaseline = JSON.stringify(captureFormState());
+}
+
+function isFormDirty() {
+  return currentView === 'form' && JSON.stringify(captureFormState()) !== formBaseline;
+}
+
+function saveDraftSoon() {
+  if (currentView !== 'form') return;
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(captureFormState()));
+  }, 250);
+}
+
+function clearDraft() {
+  clearTimeout(draftTimer);
+  localStorage.removeItem(DRAFT_KEY);
+}
+
+function restoreDraft(expectedEditingId = null) {
+  try {
+    const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+    if (!draft || (draft.editingId || null) !== expectedEditingId) return;
+    $inputAo3Url.value = draft.ao3Url || '';
+    $inputTitle.value = draft.title || '';
+    $inputAuthor.value = draft.author || '';
+    $inputFandom.value = draft.fandom || '';
+    $inputCp.value = draft.cp || '';
+    $inputWordcount.value = draft.wordCount || '';
+    $inputStatus.value = draft.completionStatus || '';
+    $inputWorkId.value = draft.workId || '';
+    $inputDate.value = draft.readingDate || new Date().toISOString().split('T')[0];
+    $inputNotes.value = draft.notes || '';
+    formRating = Number(draft.rating) || 0;
+    formAo3Tags = Array.isArray(draft.ao3Tags) ? draft.ao3Tags : [];
+    formPrivateTags = Array.isArray(draft.privateTags) ? draft.privateTags : [];
+    renderStars();
+    renderTags($ao3TagsContainer, formAo3Tags, 'ao3');
+    renderTags($privateTagsContainer, formPrivateTags, 'private');
+    updatePresetTagState();
+  } catch {
+    clearDraft();
+  }
+}
+
+function confirmLeaveForm() {
+  if (!isFormDirty()) return true;
+  if (!window.confirm('这次填写还没有保存，确定要离开吗？')) return false;
+  clearDraft();
+  return true;
+}
 
 function resetForm() {
   $inputAo3Url.value = '';
@@ -655,6 +772,7 @@ function resetForm() {
   $ocrPreview.style.display = 'none';
   $ocrProgress.style.display = 'none';
   resetOcrButton();
+  markFormBaseline();
 }
 
 function fillForm(note) {
@@ -675,6 +793,7 @@ function fillForm(note) {
   renderTags($ao3TagsContainer, formAo3Tags, 'ao3');
   renderTags($privateTagsContainer, formPrivateTags, 'private');
   updatePresetTagState();
+  markFormBaseline();
 }
 
 function formToNote() {
@@ -721,6 +840,7 @@ $starRating.addEventListener('click', (e) => {
   const newRating = parseInt(star.dataset.rating);
   formRating = formRating === newRating ? 0 : newRating;
   renderStars();
+  saveDraftSoon();
 });
 
 // 标签组件
@@ -728,7 +848,7 @@ function renderTags(container, tags, type) {
   container.innerHTML = tags.map(t =>
     `<span class="tag-item ${type}">
       ${escapeHtml(t)}
-      <span class="tag-remove" data-tag="${escapeAttribute(t)}" data-type="${type}">×</span>
+      <button type="button" class="tag-remove" aria-label="移除标签 ${escapeAttribute(t)}" data-tag="${escapeAttribute(t)}" data-type="${type}">×</button>
     </span>`
   ).join('');
 
@@ -741,6 +861,7 @@ function renderTags(container, tags, type) {
         tagsArr.splice(idx, 1);
         renderTags(container, tagsArr, type);
         if (btn.dataset.type === 'private') updatePresetTagState();
+        saveDraftSoon();
       }
     });
   });
@@ -762,6 +883,7 @@ function addTagInputHandler(inputEl, container, type) {
         if (type === 'private') updatePresetTagState();
       }
       inputEl.value = '';
+      saveDraftSoon();
     }
   });
 }
@@ -788,6 +910,7 @@ $presetTags.addEventListener('click', (e) => {
   }
   renderTags($privateTagsContainer, formPrivateTags, 'private');
   updatePresetTagState();
+  saveDraftSoon();
 });
 
 // 保存
@@ -809,14 +932,19 @@ $btnSave.addEventListener('click', () => {
     notes.push(note);
   }
   saveAndSync(note);
+  clearDraft();
   showView('bookshelf');
   renderBookshelf();
 });
 
 $btnCancelForm.addEventListener('click', () => {
+  if (!confirmLeaveForm()) return;
   showView('bookshelf');
   renderBookshelf();
 });
+
+$formView.addEventListener('input', saveDraftSoon);
+$formView.addEventListener('change', saveDraftSoon);
 
 function shakeElement(el) {
   el.style.borderColor = '#c0392b';
@@ -836,6 +964,7 @@ const $btnConfirmDelete = document.getElementById('btn-confirm-delete');
 const $btnCancelDelete = document.getElementById('btn-cancel-delete');
 
 let pendingDeleteId = null;
+let dialogReturnFocus = null;
 
 function openDetail(id) {
   currentDetailId = id;
@@ -878,17 +1007,35 @@ $btnEdit.addEventListener('click', () => {
   if (!note) return;
   editingId = note.id;
   fillForm(note);
+  restoreDraft(editingId);
   showView('form');
 });
 
 $btnDelete.addEventListener('click', () => {
   pendingDeleteId = currentDetailId;
+  dialogReturnFocus = document.activeElement;
   $confirmDialog.style.display = '';
+  $btnCancelDelete.focus();
 });
 
-$btnCancelDelete.addEventListener('click', () => {
+function closeDeleteDialog() {
   pendingDeleteId = null;
   $confirmDialog.style.display = 'none';
+  if (dialogReturnFocus) dialogReturnFocus.focus();
+}
+
+$btnCancelDelete.addEventListener('click', closeDeleteDialog);
+$confirmDialog.addEventListener('click', event => {
+  if (event.target === $confirmDialog) closeDeleteDialog();
+});
+$confirmDialog.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeDeleteDialog();
+  if (event.key === 'Tab') {
+    const buttons = [$btnConfirmDelete, $btnCancelDelete];
+    const current = buttons.indexOf(document.activeElement);
+    event.preventDefault();
+    buttons[(current + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length].focus();
+  }
 });
 
 $btnConfirmDelete.addEventListener('click', () => {
@@ -959,6 +1106,7 @@ function fillFormFromAO3Data(data) {
   if (data.summary && !$inputNotes.value) {
     $inputNotes.value = '【摘要】\n' + data.summary + '\n\n';
   }
+  saveDraftSoon();
 }
 
 $btnAutoFetch.addEventListener('click', async () => {
@@ -1309,6 +1457,7 @@ function fillFormFromOCRData(data) {
     });
     renderTags($ao3TagsContainer, formAo3Tags, 'ao3');
   }
+  saveDraftSoon();
 }
 
 // ================================================================
@@ -1399,6 +1548,11 @@ async function init() {
 init();
 
 window.addEventListener('online', () => syncWithCloud());
+window.addEventListener('beforeunload', event => {
+  if (!isFormDirty()) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') syncWithCloud();
 });
