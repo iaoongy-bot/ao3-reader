@@ -1,23 +1,23 @@
 /* ========== 基础变量 & 重置 ========== */
 :root {
-  --ao3-red: #900;
-  --ao3-red-dark: #700;
-  --ao3-red-light: #f9e6e6;
-  --bg: #fdf6f0;
-  --bg-card: #fff;
-  --text: #333;
-  --text-secondary: #777;
-  --text-light: #999;
-  --border: #e8ddd4;
-  --shadow: 0 2px 8px rgba(0,0,0,0.06);
-  --shadow-lg: 0 4px 16px rgba(0,0,0,0.1);
-  --radius: 12px;
-  --radius-sm: 8px;
-  --tag-ao3: #e3f0fb;
-  --tag-ao3-text: #2b6dad;
-  --tag-private: #fde8ec;
-  --tag-private-text: #b8455a;
-  --star-gold: #f0a500;
+  --ao3-red: #7f2537;
+  --ao3-red-dark: #651b2b;
+  --ao3-red-light: #f2e1e3;
+  --bg: #f8f1e8;
+  --bg-card: #fffdf9;
+  --text: #382d29;
+  --text-secondary: #776861;
+  --text-light: #a29189;
+  --border: #e7d9ce;
+  --shadow: 0 4px 18px rgba(80, 53, 42, 0.06);
+  --shadow-lg: 0 12px 32px rgba(80, 53, 42, 0.12);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --tag-ao3: #e8eff1;
+  --tag-ao3-text: #526d72;
+  --tag-private: #f3e1e4;
+  --tag-private-text: #8c4351;
+  --heart: #b96b78;
   --safe-bottom: env(safe-area-inset-bottom, 16px);
   --max-width: 480px;
 }
@@ -47,7 +47,7 @@ html {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  background: #f5f0ea;
+  background: #eee4da;
   color: var(--text);
   line-height: 1.6;
   display: flex;
@@ -60,7 +60,9 @@ body {
   width: 100%;
   max-width: var(--max-width);
   min-height: 100vh;
-  background: var(--bg);
+  background:
+    linear-gradient(90deg, transparent 0 31px, rgba(127,37,55,0.045) 31px 32px, transparent 32px),
+    var(--bg);
   position: relative;
   overflow-x: hidden;
 }
@@ -70,19 +72,22 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: var(--ao3-red);
-  color: #fff;
+  background: rgba(248, 241, 232, 0.94);
+  color: var(--text);
   display: flex;
   align-items: center;
   padding: 12px 16px;
   gap: 12px;
   min-height: 52px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+  border-bottom: 1px solid var(--border);
+  box-shadow: none;
+  backdrop-filter: blur(14px);
 }
 
 #header-title {
   font-size: 1.15rem;
   font-weight: 600;
+  font-family: Georgia, "Songti SC", "STSong", serif;
   flex: 1;
   text-align: center;
   white-space: nowrap;
@@ -99,7 +104,7 @@ body {
 .icon-btn {
   background: none;
   border: none;
-  color: #fff;
+  color: var(--ao3-red);
   font-size: 1.3rem;
   width: 36px;
   height: 36px;
@@ -122,14 +127,30 @@ body {
 }
 
 /* ========== 搜索栏 ========== */
+.search-tools {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: stretch;
+  margin-bottom: 14px;
+}
+
 .search-bar {
   display: flex;
   align-items: center;
   background: var(--bg-card);
   border-radius: var(--radius);
   padding: 0 14px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
   border: 1px solid var(--border);
+  box-shadow: 0 2px 10px rgba(80, 53, 42, 0.035);
+}
+
+.search-icon {
+  color: var(--text-light);
+  margin-right: 8px;
+  font-size: 1.15rem;
+  line-height: 1;
 }
 
 .search-bar input {
@@ -153,6 +174,21 @@ body {
   font-size: 1rem;
   cursor: pointer;
   padding: 4px 8px;
+}
+
+.filter-toggle {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--ao3-red);
+  padding: 0 14px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.filter-toggle[aria-expanded="true"] {
+  background: var(--ao3-red-light);
+  border-color: #ddbdc3;
 }
 
 /* ========== Fandom 书架标签栏 ========== */
@@ -198,10 +234,18 @@ body {
 
 /* ========== 筛选栏 ========== */
 .filter-bar {
-  display: flex;
+  display: none;
   gap: 8px;
   margin-bottom: 12px;
-  flex-wrap: wrap;
+  grid-template-columns: 1fr 1fr;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255,253,249,0.72);
+}
+
+.filter-bar.open {
+  display: grid;
 }
 
 .filter-select {
@@ -331,10 +375,11 @@ body {
 .book-card {
   background: var(--bg-card);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 17px 17px 16px 20px;
   box-shadow: var(--shadow);
   cursor: pointer;
-  border-left: 4px solid transparent;
+  border: 1px solid var(--border);
+  border-left: 3px solid #c68b95;
   transition: transform 0.15s;
   position: relative;
 }
@@ -343,12 +388,7 @@ body {
   transform: scale(0.98);
 }
 
-.book-card.rating-5 { border-left-color: #f0a500; }
-.book-card.rating-4 { border-left-color: #e88d2a; }
-.book-card.rating-3 { border-left-color: #82a6cb; }
-.book-card.rating-2 { border-left-color: #b0b0b0; }
-.book-card.rating-1 { border-left-color: #ccc; }
-.book-card.rating-0 { border-left-color: #e8ddd4; }
+.book-card.rating-0 { border-left-color: var(--border); }
 
 .card-header {
   display: flex;
@@ -361,6 +401,7 @@ body {
 .card-title {
   font-size: 1rem;
   font-weight: 600;
+  font-family: Georgia, "Songti SC", "STSong", serif;
   color: var(--text);
   flex: 1;
   display: -webkit-box;
@@ -373,8 +414,10 @@ body {
   display: flex;
   gap: 1px;
   flex-shrink: 0;
-  font-size: 0.85rem;
-  color: var(--star-gold);
+  font-size: 0.72rem;
+  color: var(--heart);
+  opacity: 0.72;
+  letter-spacing: 1px;
 }
 
 .card-meta {
@@ -445,7 +488,10 @@ body {
 
 .card-notes-preview {
   font-size: 0.8rem;
-  color: var(--text-light);
+  color: var(--text-secondary);
+  border-top: 1px dashed var(--border);
+  padding-top: 9px;
+  margin-top: 8px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -678,7 +724,7 @@ select {
   min-width: 0;
 }
 
-/* 评分星星 */
+/* 喜欢程度 */
 .star-rating {
   display: flex;
   gap: 6px;
@@ -687,7 +733,7 @@ select {
 .star-rating .star {
   font-size: 2rem;
   cursor: pointer;
-  color: #ddd;
+  color: #d8c8c5;
   background: none;
   border: 0;
   padding: 0 2px;
@@ -704,7 +750,7 @@ button:focus-visible {
 }
 
 .star-rating .star.active {
-  color: var(--star-gold);
+  color: var(--heart);
 }
 
 .star-rating .star:active {
@@ -844,8 +890,8 @@ button:focus-visible {
 
 .sync-status {
   border: 0;
-  background: rgba(255,255,255,0.14);
-  color: #fff;
+  background: var(--ao3-red-light);
+  color: var(--ao3-red);
   border-radius: 999px;
   padding: 5px 9px;
   font: inherit;
@@ -855,6 +901,12 @@ button:focus-visible {
 }
 
 .sync-status.error { background: rgba(255,210,210,0.22); }
+
+.form-help {
+  margin: -2px 0 8px;
+  color: var(--text-light);
+  font-size: 0.78rem;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -930,6 +982,7 @@ button:focus-visible {
 .detail-title {
   font-size: 1.3rem;
   font-weight: 700;
+  font-family: Georgia, "Songti SC", "STSong", serif;
   margin-bottom: 4px;
   color: var(--text);
   line-height: 1.4;
@@ -949,8 +1002,10 @@ button:focus-visible {
 .detail-stars {
   display: flex;
   gap: 2px;
-  font-size: 1.2rem;
-  color: var(--star-gold);
+  font-size: 0.82rem;
+  color: var(--heart);
+  opacity: 0.78;
+  letter-spacing: 1px;
   margin-bottom: 16px;
 }
 
@@ -1072,5 +1127,21 @@ button:focus-visible {
 
   .book-card:hover {
     box-shadow: var(--shadow-lg);
+  }
+
+  .filter-toggle {
+    display: none;
+  }
+
+  .search-tools {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    padding: 0;
+    border: 0;
+    background: none;
   }
 }

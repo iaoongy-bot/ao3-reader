@@ -190,7 +190,7 @@ function showView(view) {
     $headerActions.innerHTML = '';
     $btnAdd.style.display = 'none';
   } else if (view === 'bookshelf') {
-    $headerTitle.textContent = '📖 我的书架';
+    $headerTitle.textContent = '我的阅读手账';
     $btnBack.style.display = 'none';
     renderHeaderActions();
     $btnAdd.style.display = '';
@@ -246,6 +246,8 @@ const $searchInput = document.getElementById('search-input');
 const $btnSearchClear = document.getElementById('btn-search-clear');
 const $fandomTabs = document.getElementById('fandom-tabs');
 const $filterRating = document.getElementById('filter-rating');
+const $filterBar = document.getElementById('filter-bar');
+const $btnFilterToggle = document.getElementById('btn-filter-toggle');
 const $filterStatus = document.getElementById('filter-status');
 const $filterCp = document.getElementById('filter-cp');
 const $sortBy = document.getElementById('sort-by');
@@ -287,7 +289,7 @@ function getFilteredNotes() {
     ].some(value => String(value || '').toLowerCase().includes(q)));
   }
 
-  // 评分筛选
+  // 喜欢程度筛选
   const ratingFilter = $filterRating.value;
   if (ratingFilter !== 'all') {
     const r = parseInt(ratingFilter);
@@ -391,12 +393,9 @@ function updateCpFilter() {
   $filterCp.value = activeCp;
 }
 
-function renderStarIcons(rating) {
-  let html = '';
-  for (let i = 1; i <= 5; i++) {
-    html += i <= rating ? '★' : '☆';
-  }
-  return html;
+function renderHeartIcons(rating) {
+  const count = Math.round(Math.min(5, Math.max(0, Number(rating) || 0)));
+  return count > 0 ? '♥'.repeat(count) : '';
 }
 
 function truncateText(text, maxLen) {
@@ -408,7 +407,7 @@ function renderBookshelf() {
   buildFandomTabs();
   updateCpFilter();
   const filtered = getFilteredNotes();
-  $resultCount.textContent = `共 ${filtered.length} 条记录`;
+  $resultCount.textContent = `共 ${filtered.length} 篇阅读记录`;
 
   if (filtered.length === 0) {
     $booksContainer.innerHTML = EMPTY_STATE_HTML;
@@ -436,7 +435,8 @@ function createBookCard(note) {
     }
   });
 
-  const starsHtml = renderStarIcons(note.rating);
+  const heartCount = Math.round(Math.min(5, Math.max(0, Number(note.rating) || 0)));
+  const heartsHtml = renderHeartIcons(heartCount);
 
   const privateTagsHtml = (note.privateTags || []).map(t =>
     `<span class="card-tag private" data-tag="${escapeAttribute(t)}">${escapeHtml(t)}</span>`
@@ -445,7 +445,7 @@ function createBookCard(note) {
   card.innerHTML = `
     <div class="card-header">
       <div class="card-title">${escapeHtml(note.title || '未命名')}</div>
-      <div class="card-stars">${starsHtml}</div>
+      ${heartsHtml ? `<div class="card-stars" aria-label="喜欢程度 ${heartCount} 颗心">${heartsHtml}</div>` : ''}
     </div>
     <div class="card-meta">
       <span>${escapeHtml(note.author || '未知作者')}</span>
@@ -455,7 +455,6 @@ function createBookCard(note) {
     ${note.workId ? `<div class="card-meta card-workid"><span>${escapeHtml(note.workId)}</span></div>` : ''}
     ${privateTagsHtml ? `<div class="card-tags">${privateTagsHtml}</div>` : ''}
     ${note.notes ? `<div class="card-notes-preview">${escapeHtml(note.notes)}</div>` : ''}
-    <div class="card-date">${note.readingDate}</div>
   `;
 
   // 标签点击筛选（阻止冒泡）
@@ -540,6 +539,11 @@ $filterCp.addEventListener('change', () => {
   renderBookshelf();
 });
 $sortBy.addEventListener('change', () => renderBookshelf());
+
+$btnFilterToggle.addEventListener('click', () => {
+  const isOpen = $filterBar.classList.toggle('open');
+  $btnFilterToggle.setAttribute('aria-expanded', String(isOpen));
+});
 
 // 视图切换
 $btnViewCard.addEventListener('click', () => {
@@ -824,12 +828,12 @@ function formToNote() {
   return note;
 }
 
-// 评分组件
+// 喜欢程度组件
 function renderStars() {
   const stars = $starRating.querySelectorAll('.star');
   stars.forEach(star => {
     const r = parseInt(star.dataset.rating);
-    star.textContent = r <= formRating ? '★' : '☆';
+    star.textContent = r <= formRating ? '♥' : '♡';
     star.classList.toggle('active', r <= formRating);
   });
 }
@@ -971,7 +975,8 @@ function openDetail(id) {
   const note = findNoteById(id);
   if (!note) return;
 
-  const starsHtml = renderStarIcons(note.rating);
+  const heartCount = Math.round(Math.min(5, Math.max(0, Number(note.rating) || 0)));
+  const heartsHtml = renderHeartIcons(heartCount);
   const ao3Link = safeAo3Url(note.ao3Url);
   const ao3TagsHtml = (note.ao3Tags || []).map(t =>
     `<span class="tag-item ao3">${escapeHtml(t)}</span>`
@@ -986,7 +991,7 @@ function openDetail(id) {
       ${ao3Link ? `<a href="${escapeAttribute(ao3Link)}" target="_blank" rel="noopener">🔗</a> ` : ''}
       ${escapeHtml(note.author || '未知作者')}
     </div>
-    <div class="detail-stars">${starsHtml}</div>
+    ${heartsHtml ? `<div class="detail-stars" aria-label="喜欢程度 ${heartCount} 颗心">${heartsHtml}</div>` : ''}
     ${note.fandom ? `<div class="detail-field"><div class="detail-field-label">Fandom</div><div class="detail-field-value">${escapeHtml(note.fandom)}</div></div>` : ''}
     ${note.cp ? `<div class="detail-field"><div class="detail-field-label">CP</div><div class="detail-field-value">${escapeHtml(note.cp)}</div></div>` : ''}
     ${note.wordCount ? `<div class="detail-field"><div class="detail-field-label">字数</div><div class="detail-field-value">${escapeHtml(note.wordCount)}</div></div>` : ''}

@@ -12,7 +12,7 @@
     <!-- ========== 顶部导航栏 ========== -->
     <header id="app-header">
       <button id="btn-back" class="icon-btn" aria-label="返回">←</button>
-      <h1 id="header-title">📖 我的书架</h1>
+      <h1 id="header-title">我的阅读手账</h1>
       <div id="header-actions"></div>
     </header>
 
@@ -36,10 +36,14 @@
     <main id="bookshelf-view" class="view">
 
       <!-- 搜索栏 -->
-      <div class="search-bar">
-        <label class="sr-only" for="search-input">搜索书架</label>
-        <input type="search" id="search-input" placeholder="搜索标题、作者、CP、标签或读后感..." autocomplete="off">
-        <button id="btn-search-clear" class="clear-btn" aria-label="清除搜索" style="display:none">✕</button>
+      <div class="search-tools">
+        <div class="search-bar">
+          <label class="sr-only" for="search-input">搜索书架</label>
+          <span class="search-icon" aria-hidden="true">⌕</span>
+          <input type="search" id="search-input" placeholder="搜索标题、CP 或读后感" autocomplete="off">
+          <button id="btn-search-clear" class="clear-btn" aria-label="清除搜索" style="display:none">✕</button>
+        </div>
+        <button id="btn-filter-toggle" class="filter-toggle" type="button" aria-expanded="false" aria-controls="filter-bar">筛选</button>
       </div>
 
       <!-- Fandom 书架标签栏 -->
@@ -48,15 +52,15 @@
       </div>
 
       <!-- 筛选栏 -->
-      <div class="filter-bar">
-        <select id="filter-rating" class="filter-select" aria-label="按评分筛选">
-          <option value="all">全部评分</option>
-          <option value="5">⭐ 5星</option>
-          <option value="4">⭐ 4星</option>
-          <option value="3">⭐ 3星</option>
-          <option value="2">⭐ 2星</option>
-          <option value="1">⭐ 1星</option>
-          <option value="0">未评分</option>
+      <div id="filter-bar" class="filter-bar">
+        <select id="filter-rating" class="filter-select" aria-label="按喜欢程度筛选">
+          <option value="all">全部喜欢程度</option>
+          <option value="5">♥ 5颗心</option>
+          <option value="4">♥ 4颗心</option>
+          <option value="3">♥ 3颗心</option>
+          <option value="2">♥ 2颗心</option>
+          <option value="1">♥ 1颗心</option>
+          <option value="0">未标记</option>
         </select>
         <select id="filter-status" class="filter-select" aria-label="按完结状态筛选">
           <option value="all">全部状态</option>
@@ -70,8 +74,8 @@
         <select id="sort-by" class="filter-select" aria-label="排序方式">
           <option value="date-desc">按阅读日期 ↓</option>
           <option value="date-asc">按阅读日期 ↑</option>
-          <option value="rating-desc">按评分 ↓</option>
-          <option value="rating-asc">按评分 ↑</option>
+          <option value="rating-desc">按喜欢程度 ↓</option>
+          <option value="rating-asc">按喜欢程度 ↑</option>
         </select>
       </div>
 
@@ -84,7 +88,7 @@
 
       <!-- 视图切换 -->
       <div class="view-toggle-bar">
-        <span id="result-count">共 0 条记录</span>
+        <span id="result-count">共 0 篇阅读记录</span>
         <div class="view-toggle-actions">
           <button id="btn-export" class="btn-text btn-sm">导出</button>
           <button id="btn-import" class="btn-text btn-sm">导入</button>
@@ -172,15 +176,16 @@
         <input type="text" id="input-workid" placeholder="AO3 作品数字 ID，从链接自动提取" readonly>
       </section>
 
-      <!-- 个人评分 -->
+      <!-- 喜欢程度 -->
       <section class="form-section">
-        <label class="form-label">个人评分</label>
+        <label class="form-label">喜欢程度</label>
+        <p class="form-help">用心的数量，记下这篇作品打动你的程度</p>
         <div id="star-rating" class="star-rating">
-          <button type="button" class="star" data-rating="1" aria-label="1 星">☆</button>
-          <button type="button" class="star" data-rating="2" aria-label="2 星">☆</button>
-          <button type="button" class="star" data-rating="3" aria-label="3 星">☆</button>
-          <button type="button" class="star" data-rating="4" aria-label="4 星">☆</button>
-          <button type="button" class="star" data-rating="5" aria-label="5 星">☆</button>
+          <button type="button" class="star" data-rating="1" aria-label="1 颗心">♡</button>
+          <button type="button" class="star" data-rating="2" aria-label="2 颗心">♡</button>
+          <button type="button" class="star" data-rating="3" aria-label="3 颗心">♡</button>
+          <button type="button" class="star" data-rating="4" aria-label="4 颗心">♡</button>
+          <button type="button" class="star" data-rating="5" aria-label="5 颗心">♡</button>
         </div>
       </section>
 
