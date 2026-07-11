@@ -1312,7 +1312,8 @@ $btnStartOcr.addEventListener('click', async () => {
     $ocrProgressBar.value = 100;
     $ocrProgressText.textContent = '识别完成，正在提取信息...';
 
-    const extracted = extractFieldsFromOCR(recognizedTexts.join('\n'));
+    // 明确分隔每张截图，防止上一张末尾内容串入下一张字段。
+    const extracted = extractFieldsFromOCR(recognizedTexts.join('\nIMAGE_BREAK_BOUNDARY\n'));
     showOcrReview(extracted);
 
     $ocrProgressText.textContent = '✅ 识别完成，请核对结果';
@@ -1424,7 +1425,9 @@ function extractFieldsFromOCR(text) {
   // 保留标题中的方括号（如 [554]），它属于标题而不是门牌号。
   const lines = rawLines.map(l => l.replace(/[|{}~`^<>«»""''…]/g, '').trim()).filter(Boolean);
 
+  const imageBreak = /^IMAGE_BREAK_BOUNDARY$/;
   const fieldLabel = /^(Rating|Archive Warnings?|Warnings?|Category|Fandoms?|Relationships?|Characters?|Additional Tags?|Freeform Tags?|Language|Stats|Words|Chapters|Published|Updated|Completed|Summary)\s*[:：]?/i;
+  const screenshotNoise = /^(?:\d{1,2}:\d{2}|archiveofourown\.org|Subscribe|Download|Delete from History|Last visited|Visited \d+ times?|Share|Report|Menu|Home)$/i;
 
   // AO3 详情页经常把一个字段拆成多行。按标签区块合并，适配连续截图。
   function captureSection(labelPattern, stopPattern = fieldLabel) {
@@ -1434,7 +1437,8 @@ function extractFieldsFromOCR(text) {
       const values = [];
       if (match[1]?.trim()) values.push(match[1].trim());
       for (let j = i + 1; j < lines.length; j++) {
-        if (stopPattern.test(lines[j])) break;
+        if (imageBreak.test(lines[j]) || stopPattern.test(lines[j])) break;
+        if (screenshotNoise.test(lines[j])) continue;
         values.push(lines[j]);
       }
       return values.join(' ').replace(/\s+/g, ' ').trim();
@@ -1448,7 +1452,7 @@ function extractFieldsFromOCR(text) {
   const sectionTags = captureSection(/^(?:Additional Tags?|Freeform Tags?|附加标签)\s*[:：]?\s*(.*)$/i);
   const sectionLanguage = captureSection(/^(?:Language|语言)\s*[:：]?\s*(.*)$/i);
   const sectionSummary = captureSection(/^(?:Summary|简介)\s*[:：]?\s*(.*)$/i,
-    /^(?:Notes?|Chapter|Language|Stats|Published|Updated|Words|Chapters|Comments|Kudos|Bookmarks|Hits)\s*[:：]?|^(?:已完结|完结|End Notes?)$/i);
+    /^(?:Notes?|Chapter|Language|Stats|Published|Updated|Words|Chapters|Comments|Kudos|Bookmarks|Hits)\s*[:：]?|^(?:已完结|完结|End Notes?|IMAGE_BREAK_BOUNDARY)$/i);
 
   if (sectionFandom) result.fandom = sectionFandom;
   if (sectionCp) result.cp = sectionCp;
@@ -1497,9 +1501,10 @@ function extractFieldsFromOCR(text) {
   const cpCandidates = [];
   const nameCandidates = [];    // 看起来像人名的行
   const tagCandidates = [];
-  if (labeledTags) tagCandidates.push(...labeledTags.split(/[,，;；]/).map(value => value.trim()).filter(Boolean));
+  const hasStructuredTags = Boolean(sectionCharacters || sectionTags);
   if (sectionCharacters) tagCandidates.push(...sectionCharacters.split(/[,，;；]/).map(value => value.trim()).filter(Boolean));
   if (sectionTags) tagCandidates.push(...sectionTags.split(/[,，;；]/).map(value => value.trim()).filter(Boolean));
+  if (!hasStructuredTags && labeledTags) tagCandidates.push(...labeledTags.split(/[,，;；]/).map(value => value.trim()).filter(Boolean));
 
   // 标题页布局：Summary 前一行通常是作者，再往前的连续大字行组成标题。
   const summaryIndex = lines.findIndex(line => /^Summary\s*[:：]?/i.test(line));
@@ -1510,6 +1515,7 @@ function extractFieldsFromOCR(text) {
       const titleParts = [];
       for (let i = summaryIndex - 2; i >= 0 && titleParts.length < 5; i--) {
         const line = lines[i];
+        if (imageBreak.test(line)) break;
         if (fieldLabel.test(line) || /^(Stats|Language)\s*[:：]?/i.test(line)) break;
         if (/^(?:Comments|Kudos|Bookmarks|Hits|Words|Chapters|Published|Completed)\s*[:：]?/i.test(line)) break;
         if (/^[\d,./:\s-]+$/.test(line)) break;
@@ -1522,6 +1528,7 @@ function extractFieldsFromOCR(text) {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    if (imageBreak.test(line)) continue;
     if (knownLines.has(i)) continue;
 
     // 跳过 AO3 导航/UI 噪声
@@ -1589,7 +1596,7 @@ function extractFieldsFromOCR(text) {
 
     // 检测下划线词（AO3 标签特征）
     if (/[A-Za-z0-9]+_[A-Za-z0-9]+/.test(line)) {
-      tagCandidates.push(line);
+      if (!hasStructuredTags) tagCandidates.push(line);
       continue;
     }
 
@@ -1602,7 +1609,7 @@ function extractFieldsFromOCR(text) {
     }
 
     // 收集其他有意义行作为 tag 候选
-    if (line.length > 2 && line.length < 80) {
+    if (!hasStructuredTags && line.length > 2 && line.length < 80) {
       if (!/^(the|and|for|not|are|you|all|can|has|had|was|see|did|its|his|her|this|that|with|from|have|been|were|they|them|will|would|could|should|about|there|their|also|than|then|just|like|make|made|more|some|only|over|back|into|been|when|what|who|how|why|where|each|every|part|such|much|very|many|long|good|high|even)$/i.test(line)) {
         tagCandidates.push(line);
       }
