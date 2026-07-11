@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AO3 读后感</title>
-  <link rel="stylesheet" href="styles.css?v=20260711-8">
+  <link rel="stylesheet" href="styles.css?v=20260711-9">
 </head>
 <body>
   <div id="app">
@@ -133,12 +133,18 @@
       <!-- 截图上传区（链接获取失败后显示） -->
       <section id="ocr-section" class="form-section" style="display:none">
         <label class="form-label">截图识别</label>
+        <p class="form-help">可一次选择 1–3 张截图，建议覆盖标题、作者和作品信息区域</p>
         <div class="ocr-area">
-          <input type="file" id="input-screenshot" accept="image/*" style="display:none">
-          <button id="btn-upload-screenshot" class="btn-outline btn-sm">📷 上传 AO3 页面截图</button>
-          <div id="ocr-preview" class="ocr-preview" style="display:none">
-            <img id="ocr-preview-img" alt="截图预览">
+          <input type="file" id="input-screenshot" accept="image/*" multiple style="display:none">
+          <div class="ocr-controls">
+            <label class="sr-only" for="ocr-language">识别语言</label>
+            <select id="ocr-language" aria-label="截图识别语言">
+              <option value="eng">英文优先（推荐）</option>
+              <option value="chi_sim+eng">中英混合</option>
+            </select>
+            <button id="btn-upload-screenshot" class="btn-outline btn-sm">📷 选择 1–3 张截图</button>
           </div>
+          <div id="ocr-preview" class="ocr-preview-grid" style="display:none"></div>
           <div id="ocr-progress" class="ocr-progress" style="display:none">
             <progress id="ocr-progress-bar" value="0" max="100"></progress>
             <span id="ocr-progress-text">正在识别...</span>
@@ -275,10 +281,43 @@
       </div>
     </div>
 
+    <!-- ========== OCR 结果确认 ========== -->
+    <div id="ocr-review-dialog" class="dialog-overlay ocr-review-dialog" style="display:none">
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="ocr-review-title">
+        <h2 id="ocr-review-title">核对识别结果</h2>
+        <p class="dialog-warning">请修正错误后再填入表单</p>
+        <label class="form-label" for="ocr-review-title-input">标题</label>
+        <input id="ocr-review-title-input" type="text">
+        <label class="form-label" for="ocr-review-author">作者</label>
+        <input id="ocr-review-author" type="text">
+        <label class="form-label" for="ocr-review-fandom">Fandom / 原作</label>
+        <input id="ocr-review-fandom" type="text">
+        <label class="form-label" for="ocr-review-cp">CP</label>
+        <input id="ocr-review-cp" type="text">
+        <label class="form-label" for="ocr-review-wordcount">字数</label>
+        <input id="ocr-review-wordcount" type="text">
+        <label class="form-label" for="ocr-review-status">完结状态</label>
+        <select id="ocr-review-status">
+          <option value="">未识别</option>
+          <option value="连载中">连载中</option>
+          <option value="已完结">已完结</option>
+          <option value="一发完">一发完</option>
+        </select>
+        <label class="form-label" for="ocr-review-summary">文章简介</label>
+        <textarea id="ocr-review-summary" rows="6"></textarea>
+        <label class="form-label" for="ocr-review-tags">AO3 标签（每行一个）</label>
+        <textarea id="ocr-review-tags" rows="5"></textarea>
+        <div class="dialog-actions">
+          <button id="btn-apply-ocr" class="btn-primary">填入表单</button>
+          <button id="btn-cancel-ocr" class="btn-text">取消</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
-  <script src="app.js?v=20260711-4"></script>
+  <script src="app.js?v=20260711-6"></script>
 </body>
 </html>

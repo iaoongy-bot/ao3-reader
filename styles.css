@@ -779,17 +779,25 @@ select {
   gap: 10px;
 }
 
-.ocr-preview {
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  border: 1px solid var(--border);
+.ocr-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
 }
 
-.ocr-preview img {
+.ocr-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ocr-preview-grid img {
   width: 100%;
-  display: block;
-  max-height: 300px;
+  height: 120px;
   object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
 }
 
 .ocr-progress {
@@ -1221,6 +1229,30 @@ button:focus-visible {
 
 .dialog-actions button {
   flex: 1;
+}
+
+.ocr-review-dialog .dialog {
+  max-width: 420px;
+  max-height: 86vh;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.ocr-review-dialog h2 {
+  font-family: Georgia, "Songti SC", "STSong", serif;
+  font-size: 1.1rem;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.ocr-review-dialog .form-label:not(:first-of-type) {
+  margin-top: 14px;
+}
+
+@media (max-width: 380px) {
+  .ocr-controls {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ========== 动画 ========== */

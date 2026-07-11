@@ -706,10 +706,21 @@ const $ocrSection = document.getElementById('ocr-section');
 const $inputScreenshot = document.getElementById('input-screenshot');
 const $btnUploadScreenshot = document.getElementById('btn-upload-screenshot');
 const $ocrPreview = document.getElementById('ocr-preview');
-const $ocrPreviewImg = document.getElementById('ocr-preview-img');
+const $ocrLanguage = document.getElementById('ocr-language');
 const $ocrProgress = document.getElementById('ocr-progress');
 const $ocrProgressBar = document.getElementById('ocr-progress-bar');
 const $ocrProgressText = document.getElementById('ocr-progress-text');
+const $ocrReviewDialog = document.getElementById('ocr-review-dialog');
+const $ocrReviewTitle = document.getElementById('ocr-review-title-input');
+const $ocrReviewAuthor = document.getElementById('ocr-review-author');
+const $ocrReviewFandom = document.getElementById('ocr-review-fandom');
+const $ocrReviewCp = document.getElementById('ocr-review-cp');
+const $ocrReviewWordcount = document.getElementById('ocr-review-wordcount');
+const $ocrReviewStatus = document.getElementById('ocr-review-status');
+const $ocrReviewSummary = document.getElementById('ocr-review-summary');
+const $ocrReviewTags = document.getElementById('ocr-review-tags');
+const $btnApplyOcr = document.getElementById('btn-apply-ocr');
+const $btnCancelOcr = document.getElementById('btn-cancel-ocr');
 const $inputTitle = document.getElementById('input-title');
 const $inputAuthor = document.getElementById('input-author');
 const $inputFandom = document.getElementById('input-fandom');
@@ -1219,9 +1230,10 @@ function showFetchStatus(msg, type) {
 // ================================================================
 
 function resetOcrButton() {
-  $btnUploadScreenshot.textContent = '📷 上传 AO3 页面截图';
+  $btnUploadScreenshot.textContent = '📷 选择 1–3 张截图';
   $btnUploadScreenshot.style.display = '';
   $ocrPreview.style.display = 'none';
+  $ocrPreview.innerHTML = '';
   $ocrProgress.style.display = 'none';
 }
 
@@ -1230,22 +1242,25 @@ $btnUploadScreenshot.addEventListener('click', () => {
 });
 
 $inputScreenshot.addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+  const files = Array.from(e.target.files || []).slice(0, 3);
+  if (files.length === 0) return;
 
-  // 显示预览
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    $ocrPreviewImg.src = ev.target.result;
-    $ocrPreview.style.display = '';
-  };
-  reader.readAsDataURL(file);
+  $ocrPreview.innerHTML = '';
+  files.forEach((file, index) => {
+    const img = document.createElement('img');
+    img.alt = `截图 ${index + 1} 预览`;
+    img.src = URL.createObjectURL(file);
+    img.addEventListener('load', () => URL.revokeObjectURL(img.src), { once: true });
+    $ocrPreview.appendChild(img);
+  });
+  $ocrPreview.style.display = 'grid';
 
   // 加载 Tesseract
   $btnUploadScreenshot.style.display = 'none';
   $ocrProgress.style.display = '';
   $ocrProgressText.textContent = '正在加载识别引擎...';
   $ocrProgressBar.value = 0;
+  let worker = null;
 
   try {
     // 动态加载 Tesseract
@@ -1253,33 +1268,113 @@ $inputScreenshot.addEventListener('change', async (e) => {
       await loadTesseract();
     }
 
-    $ocrProgressText.textContent = '正在识别文字...';
-
-    const worker = await Tesseract.createWorker('chi_sim+eng', 1, {
+    const language = $ocrLanguage.value || 'eng';
+    let currentFileIndex = 0;
+    worker = await Tesseract.createWorker(language, 1, {
       logger: (m) => {
         if (m.status === 'recognizing text') {
-          $ocrProgressBar.value = Math.round(m.progress * 100);
-          $ocrProgressText.textContent = `正在识别文字... ${Math.round(m.progress * 100)}%`;
+          const totalProgress = ((currentFileIndex + m.progress) / files.length) * 100;
+          $ocrProgressBar.value = Math.round(totalProgress);
+          $ocrProgressText.textContent = `正在识别第 ${currentFileIndex + 1}/${files.length} 张... ${Math.round(totalProgress)}%`;
         }
       },
     });
 
-    const { data } = await worker.recognize(file);
+    const recognizedTexts = [];
+    for (currentFileIndex = 0; currentFileIndex < files.length; currentFileIndex++) {
+      $ocrProgressText.textContent = `正在增强第 ${currentFileIndex + 1}/${files.length} 张截图...`;
+      const enhancedImage = await preprocessOcrImage(files[currentFileIndex]);
+      const { data } = await worker.recognize(enhancedImage);
+      recognizedTexts.push(data.text || '');
+    }
     await worker.terminate();
+    worker = null;
 
     $ocrProgressBar.value = 100;
     $ocrProgressText.textContent = '识别完成，正在提取信息...';
 
-    const extracted = extractFieldsFromOCR(data.text);
-    fillFormFromOCRData(extracted);
+    const extracted = extractFieldsFromOCR(recognizedTexts.join('\n'));
+    showOcrReview(extracted);
 
-    $ocrProgressText.textContent = '✅ 识别完成！请核对并修正';
+    $ocrProgressText.textContent = '✅ 识别完成，请核对结果';
     setTimeout(() => { $ocrProgress.style.display = 'none'; resetOcrButton(); }, 2000);
   } catch (err) {
     console.error('OCR error:', err);
     $ocrProgressText.textContent = '❌ 识别失败，请手动填写';
     setTimeout(() => { $ocrProgress.style.display = 'none'; resetOcrButton(); }, 2000);
+  } finally {
+    if (worker) await worker.terminate().catch(() => {});
+    $inputScreenshot.value = '';
   }
+});
+
+async function preprocessOcrImage(file) {
+  const bitmap = typeof createImageBitmap === 'function'
+    ? await createImageBitmap(file)
+    : await loadImageForOcr(file);
+  const maxPixels = 8_000_000;
+  const scale = Math.min(2, 2200 / bitmap.width, Math.sqrt(maxPixels / (bitmap.width * bitmap.height)));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d', { alpha: false });
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, width, height);
+  ctx.filter = 'grayscale(1) contrast(1.45) brightness(1.05)';
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  if (typeof bitmap.close === 'function') bitmap.close();
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('图片增强失败')), 'image/png');
+  });
+}
+
+function loadImageForOcr(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('无法读取截图'));
+    };
+    img.src = url;
+  });
+}
+
+function showOcrReview(data) {
+  $ocrReviewTitle.value = data.title || '';
+  $ocrReviewAuthor.value = data.author || '';
+  $ocrReviewFandom.value = data.fandom || '';
+  $ocrReviewCp.value = data.cp || '';
+  $ocrReviewWordcount.value = data.wordCount || '';
+  $ocrReviewStatus.value = data.completionStatus || '';
+  $ocrReviewSummary.value = data.summary || '';
+  $ocrReviewTags.value = (data.ao3Tags || []).join('\n');
+  $ocrReviewDialog.style.display = 'flex';
+  $ocrReviewTitle.focus();
+}
+
+$btnApplyOcr.addEventListener('click', () => {
+  fillFormFromOCRData({
+    title: $ocrReviewTitle.value.trim(),
+    author: $ocrReviewAuthor.value.trim(),
+    fandom: $ocrReviewFandom.value.trim(),
+    cp: $ocrReviewCp.value.trim(),
+    wordCount: $ocrReviewWordcount.value.trim(),
+    completionStatus: $ocrReviewStatus.value,
+    summary: $ocrReviewSummary.value.trim(),
+    ao3Tags: $ocrReviewTags.value.split('\n').map(value => value.trim()).filter(Boolean),
+  });
+  $ocrReviewDialog.style.display = 'none';
+});
+
+$btnCancelOcr.addEventListener('click', () => {
+  $ocrReviewDialog.style.display = 'none';
 });
 
 function loadTesseract() {
@@ -1301,12 +1396,47 @@ function extractFieldsFromOCR(text) {
     wordCount: '',
     chapters: '',
     completionStatus: '',
+    summary: '',
     ao3Tags: [],
   };
 
   // 清洗 OCR 文本：去除明显噪声
   const rawLines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  const lines = rawLines.map(l => l.replace(/[|{}[\]~`^<>«»""''…]/g, '').trim()).filter(Boolean);
+  // 保留标题中的方括号（如 [554]），它属于标题而不是门牌号。
+  const lines = rawLines.map(l => l.replace(/[|{}~`^<>«»""''…]/g, '').trim()).filter(Boolean);
+
+  const fieldLabel = /^(Rating|Archive Warnings?|Warnings?|Category|Fandoms?|Relationships?|Characters?|Additional Tags?|Freeform Tags?|Language|Stats|Words|Chapters|Published|Updated|Completed|Summary)\s*[:：]?/i;
+
+  // AO3 详情页经常把一个字段拆成多行。按标签区块合并，适配连续截图。
+  function captureSection(labelPattern, stopPattern = fieldLabel) {
+    for (let i = 0; i < lines.length; i++) {
+      const match = lines[i].match(labelPattern);
+      if (!match) continue;
+      const values = [];
+      if (match[1]?.trim()) values.push(match[1].trim());
+      for (let j = i + 1; j < lines.length; j++) {
+        if (stopPattern.test(lines[j])) break;
+        values.push(lines[j]);
+      }
+      return values.join(' ').replace(/\s+/g, ' ').trim();
+    }
+    return '';
+  }
+
+  const sectionFandom = captureSection(/^(?:Fandoms?|原作)\s*[:：]?\s*(.*)$/i);
+  const sectionCp = captureSection(/^(?:Relationships?|关系|CP)\s*[:：]?\s*(.*)$/i);
+  const sectionCharacters = captureSection(/^(?:Characters?|角色)\s*[:：]?\s*(.*)$/i);
+  const sectionTags = captureSection(/^(?:Additional Tags?|Freeform Tags?|附加标签)\s*[:：]?\s*(.*)$/i);
+  const sectionLanguage = captureSection(/^(?:Language|语言)\s*[:：]?\s*(.*)$/i);
+  const sectionSummary = captureSection(/^(?:Summary|简介)\s*[:：]?\s*(.*)$/i,
+    /^(?:Notes?|Chapter|Language|Stats|Published|Updated|Words|Chapters|Comments|Kudos|Bookmarks|Hits)\s*[:：]?|^(?:已完结|完结|End Notes?)$/i);
+
+  if (sectionFandom) result.fandom = sectionFandom;
+  if (sectionCp) result.cp = sectionCp;
+  result.summary = sectionSummary
+    .replace(/([\u3400-\u9fff])\s+([\u3400-\u9fff])/g, '$1$2')
+    .replace(/\s+([，。！？；：,.!?])/g, '$1')
+    .trim();
 
   // AO3 已知值（用于分类）
   const knownRatings = /^(General Audiences|Teen And Up Audiences|Mature|Explicit|Not Rated|普遍级|辅导级|限制级|成人级|未分级)$/i;
@@ -1324,10 +1454,52 @@ function extractFieldsFromOCR(text) {
   if (warningIdx >= 0) knownLines.add(warningIdx);
   if (categoryIdx >= 0) knownLines.add(categoryIdx);
 
+  // 优先按 AO3 字段标签提取，避免依赖截图中的行位置
+  function captureLabeledValue(labelPattern) {
+    for (let i = 0; i < lines.length; i++) {
+      const match = lines[i].match(labelPattern);
+      if (!match) continue;
+      knownLines.add(i);
+      if (match[1]?.trim()) return match[1].trim();
+      const next = lines[i + 1];
+      if (next && !/^(Rating|Warnings?|Categories?|Fandoms?|Relationships?|Characters?|Additional Tags?|Language|Words|Chapters|Published|Updated|Stats)\s*[:：]?$/i.test(next)) {
+        knownLines.add(i + 1);
+        return next;
+      }
+    }
+    return '';
+  }
+
+  result.fandom ||= captureLabeledValue(/^(?:Fandoms?|原作)\s*[:：]?\s*(.*)$/i);
+  result.cp ||= captureLabeledValue(/^(?:Relationships?|关系|CP)\s*[:：]?\s*(.*)$/i);
+  const labeledTags = captureLabeledValue(/^(?:Additional Tags?|Freeform Tags?|附加标签)\s*[:：]?\s*(.*)$/i);
+
   // 收集候选
   const cpCandidates = [];
   const nameCandidates = [];    // 看起来像人名的行
   const tagCandidates = [];
+  if (labeledTags) tagCandidates.push(...labeledTags.split(/[,，;；]/).map(value => value.trim()).filter(Boolean));
+  if (sectionCharacters) tagCandidates.push(...sectionCharacters.split(/[,，;；]/).map(value => value.trim()).filter(Boolean));
+  if (sectionTags) tagCandidates.push(...sectionTags.split(/[,，;；]/).map(value => value.trim()).filter(Boolean));
+
+  // 标题页布局：Summary 前一行通常是作者，再往前的连续大字行组成标题。
+  const summaryIndex = lines.findIndex(line => /^Summary\s*[:：]?/i.test(line));
+  if (summaryIndex >= 2) {
+    const possibleAuthor = lines[summaryIndex - 1];
+    if (/^[\p{L}\p{N}_-]{2,50}$/u.test(possibleAuthor)) {
+      result.author = possibleAuthor;
+      const titleParts = [];
+      for (let i = summaryIndex - 2; i >= 0 && titleParts.length < 5; i--) {
+        const line = lines[i];
+        if (fieldLabel.test(line) || /^(Stats|Language)\s*[:：]?/i.test(line)) break;
+        if (/^(?:Comments|Kudos|Bookmarks|Hits|Words|Chapters|Published|Completed)\s*[:：]?/i.test(line)) break;
+        if (/^[\d,./:\s-]+$/.test(line)) break;
+        if (/^(\d{1,2}:\d{2}|archiveofourown\.org)$/i.test(line)) continue;
+        if (line.length > 1 && line.length < 100) titleParts.unshift(line);
+      }
+      if (titleParts.length) result.title = titleParts.join(' ').replace(/\s+/g, ' ').trim();
+    }
+  }
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -1343,6 +1515,9 @@ function extractFieldsFromOCR(text) {
     // 提取 Words / 字数
     const wordsMatch = line.match(/(?:Words|字数)\s*[:：]?\s*([\d,]+)/i);
     if (wordsMatch) { result.wordCount = wordsMatch[1]; continue; }
+    if (/^(?:Words|字数)\s*[:：]?$/i.test(line) && /^[\d,]+$/.test(lines[i + 1] || '')) {
+      result.wordCount = lines[i + 1]; continue;
+    }
 
     // 提取 Chapters / 章节
     const chMatch = line.match(/(?:Chapters|章节)\s*[:：]?\s*([\d/]+)/i);
@@ -1439,7 +1614,9 @@ function extractFieldsFromOCR(text) {
   const fandomFromPattern = topLines.find(t => fandomPatterns.test(t));
   const fandomFromAmpersand = lines.find(l => /&/.test(l) && l.length > 5 && l.length < 60);
 
-  if (fandomFromPattern) {
+  if (result.fandom) {
+    // 已通过字段标签识别
+  } else if (fandomFromPattern) {
     result.fandom = fandomFromPattern.replace(/_/g, ' ');
     const fi = tagCandidates.indexOf(fandomFromPattern);
     if (fi >= 0) tagCandidates.splice(fi, 1);
@@ -1455,7 +1632,7 @@ function extractFieldsFromOCR(text) {
   }
 
   // CP: 取含 "/" 的最佳候选（优先选包含已知角色的）
-  if (cpCandidates.length > 0) {
+  if (!result.cp && cpCandidates.length > 0) {
     // 优先选含下划线的（AO3 标签格式），其次选第一个
     const bestCp = cpCandidates.find(c => /_/.test(c)) || cpCandidates[0];
     result.cp = bestCp.replace(/_/g, ' ');
@@ -1472,14 +1649,21 @@ function extractFieldsFromOCR(text) {
 
   // AO3 原生标签：清除掉已识别的字段
   const usedFields = new Set([result.title, result.author, result.fandom, result.cp]);
-  result.ao3Tags = tagCandidates
+  result.ao3Tags = [...new Set(tagCandidates
     .filter(t => !usedFields.has(t))
+    .filter(t => !fieldLabel.test(t))
+    .filter(t => !/^(?:Comments|Kudos|Bookmarks|Hits|Words|Chapters|Published|Completed)\s*[:：]?/i.test(t))
+    .filter(t => !result.title.includes(t))
+    .filter(t => !result.summary.includes(t.replace(/\s+/g, '')) && !result.summary.includes(t))
+    .filter(t => t !== sectionCharacters && t !== sectionTags)
+    .filter(t => t !== sectionFandom && t !== sectionCp)
+    .filter(t => t !== sectionLanguage)
     .filter(t => t.length > 2)
-    .map(t => t.replace(/_/g, ' '));
+    .map(t => t.replace(/_/g, ' ')))];
 
   // 全文兜底搜索 Words / Chapters / Status
   if (!result.wordCount) {
-    const wm = text.match(/(?:Words|字数)\s*[:：]?\s*([\d,]+)/i);
+    const wm = text.match(/(?:Words|字数)\s*[:：]?\s*\n?\s*([\d,]+)/i);
     if (wm) result.wordCount = wm[1];
   }
   if (!result.chapters) {
@@ -1510,6 +1694,7 @@ function fillFormFromOCRData(data) {
   if (data.cp && !$inputCp.value) $inputCp.value = data.cp;
   if (data.wordCount && !$inputWordcount.value) $inputWordcount.value = data.wordCount;
   if (data.completionStatus && !$inputStatus.value) $inputStatus.value = data.completionStatus;
+  if (data.summary && !$inputSummary.value) $inputSummary.value = data.summary;
 
   // AO3 原生标签
   if (data.ao3Tags && data.ao3Tags.length > 0) {
