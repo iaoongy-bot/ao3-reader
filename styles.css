@@ -79,7 +79,9 @@ body {
 }
 
 #header-actions {
-  width: 36px;
+  min-width: 58px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .icon-btn {
@@ -545,6 +547,8 @@ body {
 
 input[type="text"],
 input[type="url"],
+input[type="email"],
+input[type="password"],
 input[type="date"],
 select,
 textarea {
@@ -787,6 +791,50 @@ select {
 
 .btn-primary:active {
   background: var(--ao3-red-dark);
+}
+
+.login-view {
+  min-height: calc(100vh - 52px);
+  display: flex;
+  align-items: center;
+}
+
+.login-card {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+.login-icon { text-align: center; font-size: 2.5rem; }
+.login-card h2 { text-align: center; margin: 6px 0 8px; }
+.login-card > p { color: var(--text-secondary); font-size: 0.88rem; margin-bottom: 20px; }
+.login-card input { margin-bottom: 14px; }
+.login-card .btn-lg { margin-top: 6px; }
+.login-card .login-hint { margin: 14px 0 0; text-align: center; font-size: 0.76rem; }
+
+.sync-status {
+  border: 0;
+  background: rgba(255,255,255,0.14);
+  color: #fff;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font: inherit;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sync-status.error { background: rgba(255,210,210,0.22); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .btn-outline {

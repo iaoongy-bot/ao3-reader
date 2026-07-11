@@ -1,17 +1,11 @@
-"""AO3 读后感 - 后端 API
-多级策略获取 AO3 作品页面：直接请求 → Cloudscraper → CORS 代理。
-SQLite 存储笔记数据，支持跨浏览器同步。
-部署于 Render.com 免费 tier。
-"""
+"""AO3 读后感 - AO3 作品信息获取 API。"""
 
 import re
-import os
-import json
-import sqlite3
 import logging
 import requests
+from urllib.parse import urlparse, urlunparse
 from bs4 import BeautifulSoup
-from flask import Flask, request, jsonify, g
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -19,8 +13,6 @@ CORS(app)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-API_KEY = os.environ.get('AO3_API_KEY', 'ao3-reader-secret-key')
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
@@ -38,98 +30,16 @@ CORS_PROXIES = [
     'https://api.allorigins.win/raw?url=',
 ]
 
-DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'notes.db')
-
-
-# ==================== Database ====================
-
-def get_db():
-    if 'db' not in g:
-        g.db = sqlite3.connect(DATABASE)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA journal_mode=WAL")
-    return g.db
-
-
-@app.teardown_appcontext
-def close_db(exception):
-    db = g.pop('db', None)
-    if db is not None:
-        db.close()
-
-
-def init_db():
-    with app.app_context():
-        db = get_db()
-        db.execute('''
-            CREATE TABLE IF NOT EXISTS notes (
-                id TEXT PRIMARY KEY,
-                data TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-        ''')
-        db.commit()
-
-
-# ==================== Auth ====================
-
-def check_auth():
-    key = request.headers.get('X-Api-Key') or request.args.get('key', '')
-    return key == API_KEY
-
-
-# ==================== Note CRUD ====================
-
-@app.route('/api/notes', methods=['GET'])
-def list_notes():
-    if not check_auth():
-        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
-
-    db = get_db()
-    rows = db.execute('SELECT id, data, updated_at FROM notes ORDER BY updated_at DESC').fetchall()
-    notes = []
-    for r in rows:
-        note = json.loads(r['data'])
-        note['id'] = r['id']
-        note['updatedAt'] = r['updated_at']
-        notes.append(note)
-    return jsonify({'ok': True, 'data': notes})
-
-
-@app.route('/api/notes', methods=['POST'])
-def save_note():
-    if not check_auth():
-        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
-
-    body = request.get_json(force=True)
-    note_id = body.get('id', '')
-    data = body.get('data', {})
-    updated_at = body.get('updatedAt', '')
-
-    if not note_id or not data:
-        return jsonify({'ok': False, 'error': 'id 和 data 不能为空'}), 400
-
-    db = get_db()
-    db.execute(
-        'INSERT OR REPLACE INTO notes (id, data, updated_at) VALUES (?, ?, ?)',
-        (note_id, json.dumps(data, ensure_ascii=False), updated_at)
-    )
-    db.commit()
-    return jsonify({'ok': True})
-
-
-@app.route('/api/notes/<note_id>', methods=['DELETE'])
-def delete_note(note_id):
-    if not check_auth():
-        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
-
-    db = get_db()
-    db.execute('DELETE FROM notes WHERE id = ?', (note_id,))
-    db.commit()
-    return jsonify({'ok': True})
-
-
 # ==================== AO3 Fetch ====================
+
+def normalize_ao3_url(url):
+    """只允许 AO3 官方作品页，避免服务器被用于请求任意地址。"""
+    parsed = urlparse(url)
+    if parsed.scheme != 'https' or parsed.hostname not in {'archiveofourown.org', 'www.archiveofourown.org'}:
+        return None
+    if not re.fullmatch(r'/works/\d+(?:/chapters/\d+)?/?', parsed.path):
+        return None
+    return urlunparse(('https', 'archiveofourown.org', parsed.path, '', parsed.query, ''))
 
 def extract_work_id(url):
     match = re.search(r'/works/(\d+)', url)
@@ -202,7 +112,7 @@ def _dd_text(soup, selector):
 
 def fetch_direct(url):
     """策略 1: 直接请求 AO3"""
-    resp = requests.get(url, headers=HEADERS, timeout=25)
+    resp = requests.get(url, headers=HEADERS, timeout=25, allow_redirects=False)
     if resp.status_code == 200:
         return resp.text
     raise Exception(f'HTTP {resp.status_code}')
@@ -213,7 +123,7 @@ def fetch_cloudscraper(url):
     try:
         import cloudscraper
         scraper = cloudscraper.create_scraper()
-        resp = scraper.get(url, timeout=30)
+        resp = scraper.get(url, timeout=30, allow_redirects=False)
         if resp.status_code == 200:
             return resp.text
         raise Exception(f'Cloudscraper HTTP {resp.status_code}')
@@ -240,6 +150,10 @@ def fetch_work():
     url = request.args.get('url', '').strip()
     if not url:
         return jsonify({'ok': False, 'error': '缺少 url 参数'}), 400
+
+    url = normalize_ao3_url(url)
+    if not url:
+        return jsonify({'ok': False, 'error': '只支持 AO3 官方 HTTPS 作品链接'}), 400
 
     work_id = extract_work_id(url)
     if not work_id:
@@ -285,10 +199,6 @@ def fetch_work():
 def health():
     return jsonify({'ok': True, 'status': 'running'})
 
-
-# ==================== Init ====================
-
-init_db()
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

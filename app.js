@@ -3,7 +3,7 @@
    ================================================================ */
 
 const STORAGE_KEY = 'ao3_reading_notes';
-const API_KEY = 'ao3-reader-2026-jiao';
+const PENDING_SYNC_KEY = 'ao3_pending_sync_operations';
 let notes = [];
 let currentView = 'bookshelf';
 let editingId = null;
@@ -11,53 +11,66 @@ let currentDetailId = null;
 let ocrWorker = null;
 let activeFandom = '';
 let activeCp = 'all';
-let backendAvailable = false;
+let cloud = null;
+let currentUser = null;
+let syncInProgress = false;
 
-// ========== 后端同步 ==========
+// ========== Supabase 云端同步 ==========
 
-async function syncFromBackend() {
+function getPendingOperations() {
   try {
-    const resp = await fetch(`${BACKEND_URL}/api/notes?key=${encodeURIComponent(API_KEY)}`, {
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!resp.ok) return null;
-    const json = await resp.json();
-    if (json.ok && json.data) {
-      backendAvailable = true;
-      return json.data;
+    const value = JSON.parse(localStorage.getItem(PENDING_SYNC_KEY) || '[]');
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+function setPendingOperations(operations) {
+  localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(operations));
+}
+
+function queueSyncOperation(operation) {
+  const pending = getPendingOperations().filter(item => item.id !== operation.id);
+  pending.push(operation);
+  setPendingOperations(pending);
+  updateSyncStatus(navigator.onLine ? '等待同步' : '离线保存');
+}
+
+function initCloudClient() {
+  const config = window.AO3_CLOUD_CONFIG || {};
+  if (!config.supabaseUrl || !config.supabaseAnonKey || !window.supabase) return false;
+  cloud = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  });
+  return true;
+}
+
+async function flushPendingOperations() {
+  if (!cloud || !currentUser || !navigator.onLine) return false;
+  const pending = getPendingOperations();
+  if (pending.length === 0) return true;
+
+  for (let i = 0; i < pending.length; i++) {
+    const item = pending[i];
+    const { data: existing, error: readError } = await cloud
+      .from('ao3_notes')
+      .select('updated_at')
+      .eq('id', item.id)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (existing && new Date(existing.updated_at).getTime() > new Date(item.updatedAt).getTime()) {
+      setPendingOperations(pending.slice(i + 1));
+      continue;
     }
-  } catch (e) {
-    backendAvailable = false;
-    console.warn('Backend unavailable, using local storage');
+    const row = item.type === 'delete'
+      ? { user_id: currentUser.id, id: item.id, data: {}, updated_at: item.updatedAt, deleted_at: item.updatedAt }
+      : { user_id: currentUser.id, id: item.id, data: item.note, updated_at: item.updatedAt, deleted_at: null };
+    const { error } = await cloud.from('ao3_notes').upsert(row, { onConflict: 'user_id,id' });
+    if (error) throw error;
+    setPendingOperations(pending.slice(i + 1));
   }
-  return null;
-}
-
-async function syncToBackend(note) {
-  if (!backendAvailable) return;
-  try {
-    await fetch(`${BACKEND_URL}/api/notes?key=${encodeURIComponent(API_KEY)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: note.id, data: note, updatedAt: note.updatedAt || new Date().toISOString() }),
-      signal: AbortSignal.timeout(8000),
-    });
-  } catch (e) {
-    backendAvailable = false;
-    console.warn('Backend sync failed');
-  }
-}
-
-async function deleteFromBackend(id) {
-  if (!backendAvailable) return;
-  try {
-    await fetch(`${BACKEND_URL}/api/notes/${id}?key=${encodeURIComponent(API_KEY)}`, {
-      method: 'DELETE',
-      signal: AbortSignal.timeout(8000),
-    });
-  } catch (e) {
-    backendAvailable = false;
-  }
+  return true;
 }
 
 // ========== 数据读写 ==========
@@ -71,35 +84,50 @@ function loadNotes() {
   }
 }
 
-async function syncFromBackendInBackground() {
-  const remote = await syncFromBackend();
-  if (!remote || remote.length === 0) {
-    // 本地有数据但后端为空，把本地数据推送到后端
-    if (notes.length > 0) {
-      backendAvailable = true;
-      for (const n of notes) {
-        await syncToBackend(n);
+async function syncWithCloud() {
+  if (!cloud || !currentUser || syncInProgress) return;
+  syncInProgress = true;
+  updateSyncStatus('同步中…');
+  try {
+    await flushPendingOperations();
+    const { data: rows, error } = await cloud
+      .from('ao3_notes')
+      .select('id,data,updated_at,deleted_at');
+    if (error) throw error;
+
+    const localMap = new Map(notes.map(note => [note.id, note]));
+    const remoteIds = new Set();
+    for (const row of rows || []) {
+      remoteIds.add(row.id);
+      const local = localMap.get(row.id);
+      const localTime = new Date(local?.updatedAt || 0).getTime();
+      const remoteTime = new Date(row.updated_at || 0).getTime();
+      if (row.deleted_at && remoteTime >= localTime) {
+        localMap.delete(row.id);
+      } else if (!row.deleted_at && (!local || remoteTime >= localTime)) {
+        localMap.set(row.id, { ...row.data, id: row.id, updatedAt: row.updated_at });
+      } else if (local && localTime > remoteTime) {
+        queueSyncOperation({ type: 'upsert', id: local.id, note: local, updatedAt: local.updatedAt });
       }
     }
-    return;
-  }
 
-  // 合并：以后端为主，本地数据补充（以 updatedAt 为准）
-  const localMap = new Map(notes.map(n => [n.id, n]));
-  const remoteMap = new Map(remote.map(n => [n.id, n]));
-
-  for (const [id, local] of localMap) {
-    const remoteNote = remoteMap.get(id);
-    if (!remoteNote) {
-      remoteMap.set(id, local);
-    } else if (new Date(local.updatedAt) > new Date(remoteNote.updatedAt)) {
-      remoteMap.set(id, local);
+    for (const local of localMap.values()) {
+      if (!remoteIds.has(local.id)) {
+        queueSyncOperation({ type: 'upsert', id: local.id, note: local, updatedAt: local.updatedAt || new Date().toISOString() });
+      }
     }
-  }
 
-  notes = Array.from(remoteMap.values());
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-  renderBookshelf();
+    notes = Array.from(localMap.values());
+    saveNotes();
+    await flushPendingOperations();
+    renderBookshelf();
+    updateSyncStatus('已同步');
+  } catch (error) {
+    console.warn('Cloud sync failed:', error);
+    updateSyncStatus(navigator.onLine ? '同步失败' : '离线保存', true);
+  } finally {
+    syncInProgress = false;
+  }
 }
 
 function saveNotes() {
@@ -109,14 +137,17 @@ function saveNotes() {
 // 保存并同步到后端
 function saveAndSync(note) {
   saveNotes();
-  syncToBackend(note);
+  queueSyncOperation({ type: 'upsert', id: note.id, note, updatedAt: note.updatedAt });
+  syncWithCloud();
 }
 
 // 删除并同步到后端
 function deleteAndSync(id) {
   notes = notes.filter(n => n.id !== id);
   saveNotes();
-  deleteFromBackend(id);
+  const updatedAt = new Date().toISOString();
+  queueSyncOperation({ type: 'delete', id, updatedAt });
+  syncWithCloud();
 }
 
 function generateId() {
@@ -140,32 +171,51 @@ const PRESET_TAGS = ['甜文', '虐心', 'HE', 'BE', '长草', '慢热', '神作
 const $bookshelfView = document.getElementById('bookshelf-view');
 const $formView = document.getElementById('form-view');
 const $detailView = document.getElementById('detail-view');
+const $loginView = document.getElementById('login-view');
 const $headerTitle = document.getElementById('header-title');
 const $btnBack = document.getElementById('btn-back');
 const $headerActions = document.getElementById('header-actions');
 
 function showView(view) {
   currentView = view;
+  $loginView.style.display = view === 'login' ? 'flex' : 'none';
   $bookshelfView.style.display = view === 'bookshelf' ? '' : 'none';
   $formView.style.display = view === 'form' ? '' : 'none';
   $detailView.style.display = view === 'detail' ? '' : 'none';
 
-  if (view === 'bookshelf') {
-    $headerTitle.textContent = '📖 我的书架';
+  if (view === 'login') {
+    $headerTitle.textContent = '📖 AO3 读后感';
     $btnBack.style.display = 'none';
     $headerActions.innerHTML = '';
+    $btnAdd.style.display = 'none';
+  } else if (view === 'bookshelf') {
+    $headerTitle.textContent = '📖 我的书架';
+    $btnBack.style.display = 'none';
+    renderHeaderActions();
     $btnAdd.style.display = '';
   } else if (view === 'form') {
     $headerTitle.textContent = editingId ? '编辑记录' : '添加记录';
     $btnBack.style.display = '';
-    $headerActions.innerHTML = '';
+    renderHeaderActions();
     $btnAdd.style.display = 'none';
   } else if (view === 'detail') {
     $headerTitle.textContent = '文章详情';
     $btnBack.style.display = '';
-    $headerActions.innerHTML = '';
+    renderHeaderActions();
     $btnAdd.style.display = 'none';
   }
+}
+
+function renderHeaderActions() {
+  $headerActions.innerHTML = '<button id="sync-status" class="sync-status" type="button" title="点击立即同步">云端</button>';
+  document.getElementById('sync-status').addEventListener('click', syncWithCloud);
+}
+
+function updateSyncStatus(text, isError = false) {
+  const status = document.getElementById('sync-status');
+  if (!status) return;
+  status.textContent = text;
+  status.classList.toggle('error', isError);
 }
 
 $btnBack.addEventListener('click', () => {
@@ -306,7 +356,7 @@ function buildFandomTabs() {
 
   fandoms.forEach(f => {
     const active = activeFandom === f ? ' active' : '';
-    html += `<button class="fandom-tab${active}" data-fandom="${escapeHtml(f)}">${escapeHtml(f)}</button>`;
+    html += `<button class="fandom-tab${active}" data-fandom="${escapeAttribute(f)}">${escapeHtml(f)}</button>`;
   });
 
   $fandomTabs.innerHTML = html;
@@ -329,7 +379,7 @@ function updateCpFilter() {
   let html = '<option value="all">全部 CP</option>';
   cps.forEach(cp => {
     const sel = activeCp === cp ? ' selected' : '';
-    html += `<option value="${escapeHtml(cp)}"${sel}>${escapeHtml(cp)}</option>`;
+    html += `<option value="${escapeAttribute(cp)}"${sel}>${escapeHtml(cp)}</option>`;
   });
   $filterCp.innerHTML = html;
   $filterCp.value = activeCp;
@@ -374,7 +424,7 @@ function createBookCard(note) {
   const starsHtml = renderStarIcons(note.rating);
 
   const privateTagsHtml = (note.privateTags || []).map(t =>
-    `<span class="card-tag private" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`
+    `<span class="card-tag private" data-tag="${escapeAttribute(t)}">${escapeHtml(t)}</span>`
   ).join('');
 
   card.innerHTML = `
@@ -407,8 +457,27 @@ function createBookCard(note) {
 
 function escapeHtml(str) {
   const div = document.createElement('div');
-  div.textContent = str;
+  div.textContent = String(str ?? '');
   return div.innerHTML;
+}
+
+function escapeAttribute(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+function safeAo3Url(value) {
+  try {
+    const url = new URL(value);
+    const validHost = url.hostname === 'archiveofourown.org' || url.hostname === 'www.archiveofourown.org';
+    return url.protocol === 'https:' && validHost && /^\/works\/\d+/.test(url.pathname) ? url.href : '';
+  } catch {
+    return '';
+  }
 }
 
 function setTagFilter(tag) {
@@ -503,9 +572,13 @@ $inputImportFile.addEventListener('change', () => {
       imported.forEach(n => { if (n.id) map.set(n.id, n); });
       notes = Array.from(map.values());
       saveNotes();
-      // 同步到后端
-      backendAvailable = true;
-      imported.forEach(n => syncToBackend(n));
+      // 加入云端同步队列
+      imported.forEach(n => {
+        const updatedAt = n.updatedAt || new Date().toISOString();
+        n.updatedAt = updatedAt;
+        queueSyncOperation({ type: 'upsert', id: n.id, note: n, updatedAt });
+      });
+      syncWithCloud();
       renderBookshelf();
       alert(`成功导入 ${imported.length} 条记录`);
     } catch (e) {
@@ -655,7 +728,7 @@ function renderTags(container, tags, type) {
   container.innerHTML = tags.map(t =>
     `<span class="tag-item ${type}">
       ${escapeHtml(t)}
-      <span class="tag-remove" data-tag="${escapeHtml(t)}" data-type="${type}">×</span>
+      <span class="tag-remove" data-tag="${escapeAttribute(t)}" data-type="${type}">×</span>
     </span>`
   ).join('');
 
@@ -770,6 +843,7 @@ function openDetail(id) {
   if (!note) return;
 
   const starsHtml = renderStarIcons(note.rating);
+  const ao3Link = safeAo3Url(note.ao3Url);
   const ao3TagsHtml = (note.ao3Tags || []).map(t =>
     `<span class="tag-item ao3">${escapeHtml(t)}</span>`
   ).join('');
@@ -780,7 +854,7 @@ function openDetail(id) {
   $detailContent.innerHTML = `
     <div class="detail-title">${escapeHtml(note.title || '未命名')}</div>
     <div class="detail-author">
-      ${note.ao3Url ? `<a href="${escapeHtml(note.ao3Url)}" target="_blank" rel="noopener">🔗</a> ` : ''}
+      ${ao3Link ? `<a href="${escapeAttribute(ao3Link)}" target="_blank" rel="noopener">🔗</a> ` : ''}
       ${escapeHtml(note.author || '未知作者')}
     </div>
     <div class="detail-stars">${starsHtml}</div>
@@ -1241,19 +1315,51 @@ function fillFormFromOCRData(data) {
 // 初始化
 // ================================================================
 
-function init() {
+const $loginEmail = document.getElementById('login-email');
+const $loginPassword = document.getElementById('login-password');
+const $loginStatus = document.getElementById('login-status');
+const $btnLogin = document.getElementById('btn-login');
+
+function showLoginStatus(message, type = 'error') {
+  $loginStatus.style.display = '';
+  $loginStatus.textContent = message;
+  $loginStatus.className = `fetch-status ${type}`;
+}
+
+async function handleLogin() {
+  const email = $loginEmail.value.trim();
+  const password = $loginPassword.value;
+  if (!email || !password) {
+    showLoginStatus('请输入邮箱和密码');
+    return;
+  }
+  $btnLogin.disabled = true;
+  showLoginStatus('正在登录…', 'loading');
+  const { data, error } = await cloud.auth.signInWithPassword({ email, password });
+  $btnLogin.disabled = false;
+  if (error) {
+    showLoginStatus('登录失败，请检查邮箱或密码');
+    return;
+  }
+  currentUser = data.user;
+  $loginPassword.value = '';
+  $loginStatus.style.display = 'none';
+  showView('bookshelf');
+  renderBookshelf();
+  syncWithCloud();
+}
+
+$btnLogin.addEventListener('click', handleLogin);
+$loginPassword.addEventListener('keydown', event => {
+  if (event.key === 'Enter') handleLogin();
+});
+
+async function init() {
   // 即时从 localStorage 加载并渲染
   loadNotes();
 
   // 设置默认日期
   $inputDate.value = new Date().toISOString().split('T')[0];
-
-  // 初始渲染
-  showView('bookshelf');
-  renderBookshelf();
-
-  // 后台异步同步后端（不阻塞渲染）
-  syncFromBackendInBackground();
 
   // 添加 shake 动画
   const style = document.createElement('style');
@@ -1266,6 +1372,33 @@ function init() {
     }
   `;
   document.head.appendChild(style);
+
+  if (!initCloudClient()) {
+    showView('login');
+    showLoginStatus('云端尚未配置，请先填写 config.js');
+    $btnLogin.disabled = true;
+    return;
+  }
+
+  const { data: { session } } = await cloud.auth.getSession();
+  currentUser = session?.user || null;
+  if (currentUser) {
+    showView('bookshelf');
+    renderBookshelf();
+    syncWithCloud();
+  } else {
+    showView('login');
+  }
+
+  cloud.auth.onAuthStateChange((_event, sessionValue) => {
+    currentUser = sessionValue?.user || null;
+    if (!currentUser) showView('login');
+  });
 }
 
 init();
+
+window.addEventListener('online', () => syncWithCloud());
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') syncWithCloud();
+});
