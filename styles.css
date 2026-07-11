@@ -94,12 +94,16 @@ body {
 }
 
 .header-copy {
-  grid-column: 2;
+  grid-column: auto;
   position: absolute;
-  left: 50%;
-  width: calc(100% - 180px);
-  transform: translateX(-50%);
+  inset: 0;
+  width: auto;
+  transform: none;
   min-width: 0;
+  padding: 0 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   text-align: center;
   pointer-events: none;
 }
