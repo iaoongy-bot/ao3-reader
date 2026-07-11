@@ -1590,3 +1590,27 @@ window.addEventListener('beforeunload', event => {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') syncWithCloud();
 });
+
+// iOS 主屏 Web App 有时会在输入框失焦后保留焦点缩放。
+// 输入期间临时锁定比例，失焦后恢复正常缩放能力。
+const viewportMeta = document.querySelector('meta[name="viewport"]');
+const normalViewport = 'width=device-width, initial-scale=1.0';
+const lockedViewport = 'width=device-width, initial-scale=1.0, maximum-scale=1.0';
+const isStandaloneWebApp = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+if (viewportMeta && isStandaloneWebApp) {
+  document.addEventListener('focusin', event => {
+    if (event.target.matches('input, textarea, select')) {
+      viewportMeta.setAttribute('content', lockedViewport);
+    }
+  });
+
+  document.addEventListener('focusout', event => {
+    if (!event.target.matches('input, textarea, select')) return;
+    viewportMeta.setAttribute('content', lockedViewport);
+    setTimeout(() => {
+      viewportMeta.setAttribute('content', normalViewport);
+      window.scrollTo({ left: 0, top: window.scrollY, behavior: 'auto' });
+    }, 350);
+  });
+}

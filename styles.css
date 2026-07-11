@@ -171,6 +171,12 @@ body {
   box-shadow: var(--shadow);
 }
 
+#form-view input,
+#form-view select,
+#form-view textarea {
+  font-size: 17px !important;
+}
+
 /* ========== 搜索栏 ========== */
 .search-tools {
   display: grid;
