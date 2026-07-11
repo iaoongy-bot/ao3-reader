@@ -288,7 +288,7 @@ function getFilteredNotes() {
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
     result = result.filter(n => [
-      n.title, n.author, n.fandom, n.cp, n.notes, n.workId,
+      n.title, n.author, n.fandom, n.cp, n.summary, n.notes, n.workId,
       ...(Array.isArray(n.ao3Tags) ? n.ao3Tags : []),
       ...(Array.isArray(n.privateTags) ? n.privateTags : []),
     ].some(value => String(value || '').toLowerCase().includes(q)));
@@ -658,6 +658,7 @@ function normalizeImportedNote(value) {
     workId: stringValue('workId', 100), rating: Math.min(5, Math.max(0, Number(value.rating) || 0)),
     ao3Tags: tagList('ao3Tags'), privateTags: tagList('privateTags'),
     notes: stringValue('notes', 100000), readingDate: stringValue('readingDate', 20),
+    summary: stringValue('summary', 50000),
     createdAt: Number.isFinite(Date.parse(value.createdAt)) ? value.createdAt : updatedAt,
     updatedAt,
   };
@@ -691,6 +692,7 @@ const $inputCp = document.getElementById('input-cp');
 const $inputWordcount = document.getElementById('input-wordcount');
 const $inputStatus = document.getElementById('input-status');
 const $inputWorkId = document.getElementById('input-workid');
+const $inputSummary = document.getElementById('input-summary');
 const $inputDate = document.getElementById('input-date');
 const $inputNotes = document.getElementById('input-notes');
 const $starRating = document.getElementById('star-rating');
@@ -719,6 +721,7 @@ function captureFormState() {
     wordCount: $inputWordcount.value,
     completionStatus: $inputStatus.value,
     workId: $inputWorkId.value,
+    summary: $inputSummary.value,
     readingDate: $inputDate.value,
     notes: $inputNotes.value,
     rating: formRating,
@@ -760,6 +763,7 @@ function restoreDraft(expectedEditingId = null) {
     $inputWordcount.value = draft.wordCount || '';
     $inputStatus.value = draft.completionStatus || '';
     $inputWorkId.value = draft.workId || '';
+    $inputSummary.value = draft.summary || '';
     $inputDate.value = draft.readingDate || new Date().toISOString().split('T')[0];
     $inputNotes.value = draft.notes || '';
     formRating = Number(draft.rating) || 0;
@@ -790,6 +794,7 @@ function resetForm() {
   $inputWordcount.value = '';
   $inputStatus.value = '';
   $inputWorkId.value = '';
+  $inputSummary.value = '';
   $inputDate.value = new Date().toISOString().split('T')[0];
   $inputNotes.value = '';
   formRating = 0;
@@ -817,6 +822,7 @@ function fillForm(note) {
   $inputWordcount.value = note.wordCount || '';
   $inputStatus.value = note.completionStatus || '';
   $inputWorkId.value = note.workId || '';
+  $inputSummary.value = note.summary || '';
   $inputDate.value = note.readingDate || new Date().toISOString().split('T')[0];
   $inputNotes.value = note.notes || '';
   formRating = note.rating || 0;
@@ -841,6 +847,7 @@ function formToNote() {
     wordCount: $inputWordcount.value.trim(),
     completionStatus: $inputStatus.value,
     workId: $inputWorkId.value.trim(),
+    summary: $inputSummary.value.trim(),
     rating: formRating,
     ao3Tags: [...formAo3Tags],
     privateTags: [...formPrivateTags],
@@ -1026,6 +1033,7 @@ function openDetail(id) {
     ${note.wordCount ? `<div class="detail-field"><div class="detail-field-label">字数</div><div class="detail-field-value">${escapeHtml(note.wordCount)}</div></div>` : ''}
     ${note.completionStatus ? `<div class="detail-field"><div class="detail-field-label">完结状态</div><div class="detail-field-value">${escapeHtml(note.completionStatus)}</div></div>` : ''}
     ${note.workId ? `<div class="detail-field"><div class="detail-field-label">门牌号</div><div class="detail-field-value">${escapeHtml(note.workId)}</div></div>` : ''}
+    ${note.summary ? `<div class="detail-field"><div class="detail-field-label">文章简介</div><div class="detail-summary">${escapeHtml(note.summary)}</div></div>` : ''}
     ${ao3TagsHtml ? `<div class="detail-field"><div class="detail-field-label">AO3 标签</div><div class="detail-tags">${ao3TagsHtml}</div></div>` : ''}
     ${privateTagsHtml ? `<div class="detail-field"><div class="detail-field-label">私人 Tag</div><div class="detail-tags">${privateTagsHtml}</div></div>` : ''}
     ${note.readingDate ? `<div class="detail-field"><div class="detail-field-label">阅读日期</div><div class="detail-field-value">${note.readingDate}</div></div>` : ''}
@@ -1136,10 +1144,8 @@ function fillFormFromAO3Data(data) {
   formAo3Tags = [...new Set(allTags)]; // 去重
   renderTags($ao3TagsContainer, formAo3Tags, 'ao3');
 
-  // 摘要预填到读后感
-  if (data.summary && !$inputNotes.value) {
-    $inputNotes.value = '【摘要】\n' + data.summary + '\n\n';
-  }
+  // AO3 Summary 独立保存为文章简介，不混入个人读后感
+  if (data.summary) $inputSummary.value = data.summary;
   saveDraftSoon();
 }
 

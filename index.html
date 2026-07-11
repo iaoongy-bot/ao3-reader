@@ -176,7 +176,13 @@
       <!-- 门牌号 -->
       <section class="form-section">
         <label class="form-label" for="input-workid">门牌号</label>
-        <input type="text" id="input-workid" placeholder="AO3 作品数字 ID，从链接自动提取" readonly>
+        <input type="text" id="input-workid" inputmode="numeric" placeholder="AO3 作品数字 ID，可自动获取或手动填写">
+      </section>
+
+      <!-- 文章简介 -->
+      <section class="form-section">
+        <label class="form-label" for="input-summary">文章简介</label>
+        <textarea id="input-summary" rows="4" placeholder="AO3 Summary 会自动填写，也可以手动补充..."></textarea>
       </section>
 
       <!-- 喜欢程度 -->
@@ -268,6 +274,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
-  <script src="app.js?v=20260711-1"></script>
+  <script src="app.js?v=20260711-2"></script>
 </body>
 </html>

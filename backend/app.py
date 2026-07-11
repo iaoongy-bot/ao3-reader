@@ -70,8 +70,8 @@ def parse_ao3_page(html, ao3_url):
     cats = texts(soup.select('dd.category.tags a.tag'))
     category = cats[0] if cats else ''
 
-    summary_el = soup.select_one('blockquote.userstuff.summary')
-    summary = summary_el.get_text(strip=True) if summary_el else ''
+    summary_el = soup.select_one('div.summary blockquote.userstuff') or soup.select_one('blockquote.userstuff.summary')
+    summary = summary_el.get_text('\n', strip=True) if summary_el else ''
 
     word_count = _dd_text(soup, 'dd.words')
     chapters = _dd_text(soup, 'dd.chapters')

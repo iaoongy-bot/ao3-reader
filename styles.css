@@ -1114,6 +1114,16 @@ button:focus-visible {
   color: var(--text);
 }
 
+.detail-summary {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
 .detail-date {
   margin-top: 16px;
   font-size: 0.78rem;
