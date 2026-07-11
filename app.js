@@ -1287,7 +1287,7 @@ $btnStartOcr.addEventListener('click', async () => {
       await loadTesseract();
     }
 
-    const language = $ocrLanguage.value || 'eng';
+    const language = $ocrLanguage.value || 'chi_sim+eng';
     let currentFileIndex = 0;
     worker = await Tesseract.createWorker(language, 1, {
       logger: (m) => {
@@ -1298,6 +1298,7 @@ $btnStartOcr.addEventListener('click', async () => {
         }
       },
     });
+    await worker.setParameters({ preserve_interword_spaces: '0' });
 
     const recognizedTexts = [];
     for (currentFileIndex = 0; currentFileIndex < files.length; currentFileIndex++) {
@@ -1342,7 +1343,8 @@ async function preprocessOcrImage(file) {
   const ctx = canvas.getContext('2d', { alpha: false });
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, width, height);
-  ctx.filter = 'grayscale(1) contrast(1.45) brightness(1.05)';
+  // 中文笔画较细，过高对比度容易让横撇点等笔画断裂。
+  ctx.filter = 'grayscale(1) contrast(1.2) brightness(1.03)';
   ctx.drawImage(bitmap, 0, 0, width, height);
   if (typeof bitmap.close === 'function') bitmap.close();
   return new Promise((resolve, reject) => {
@@ -1429,6 +1431,21 @@ function extractFieldsFromOCR(text) {
   const fieldLabel = /^(Rating|Archive Warnings?|Warnings?|Category|Fandoms?|Relationships?|Characters?|Additional Tags?|Freeform Tags?|Language|Stats|Words|Chapters|Published|Updated|Completed|Summary)\s*[:：]?/i;
   const screenshotNoise = /^(?:\d{1,2}:\d{2}|archiveofourown\.org|Subscribe|Download|Delete from History|Last visited|Visited \d+ times?|Share|Report|Menu|Home)$/i;
 
+  function normalizeChineseSpacing(value) {
+    let normalized = String(value || '');
+    let previous;
+    // OCR 常在每个汉字之间插入空格；循环处理，避免正则非重叠匹配留下隔字空格。
+    do {
+      previous = normalized;
+      normalized = normalized.replace(/([\u3400-\u9fff])\s+([\u3400-\u9fff])/g, '$1$2');
+    } while (normalized !== previous);
+    return normalized
+      .replace(/\s+([，。！？；：、）】》”’])/g, '$1')
+      .replace(/([（【《“‘])\s+/g, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   // AO3 详情页经常把一个字段拆成多行。按标签区块合并，适配连续截图。
   function captureSection(labelPattern, stopPattern = fieldLabel) {
     for (let i = 0; i < lines.length; i++) {
@@ -1456,10 +1473,8 @@ function extractFieldsFromOCR(text) {
 
   if (sectionFandom) result.fandom = sectionFandom;
   if (sectionCp) result.cp = sectionCp;
-  result.summary = sectionSummary
-    .replace(/([\u3400-\u9fff])\s+([\u3400-\u9fff])/g, '$1$2')
-    .replace(/\s+([，。！？；：,.!?])/g, '$1')
-    .trim();
+  result.summary = normalizeChineseSpacing(sectionSummary)
+    .replace(/\s+([,.!?])/g, '$1');
 
   // AO3 已知值（用于分类）
   const knownRatings = /^(General Audiences|Teen And Up Audiences|Mature|Explicit|Not Rated|普遍级|辅导级|限制级|成人级|未分级)$/i;
@@ -1709,6 +1724,12 @@ function extractFieldsFromOCR(text) {
     else if (/In Progress|WIP|连载中|进行中/i.test(text)) result.completionStatus = '连载中';
     else if (/One.?Shot|一发完/i.test(text)) result.completionStatus = '一发完';
   }
+
+  result.title = normalizeChineseSpacing(result.title);
+  result.author = normalizeChineseSpacing(result.author);
+  result.fandom = normalizeChineseSpacing(result.fandom);
+  result.cp = normalizeChineseSpacing(result.cp);
+  result.ao3Tags = result.ao3Tags.map(normalizeChineseSpacing).filter(Boolean);
 
   return result;
 }
