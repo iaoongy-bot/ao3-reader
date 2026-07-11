@@ -72,7 +72,8 @@ body {
   z-index: 100;
   background: rgba(247, 246, 243, 0.94);
   color: var(--text);
-  display: flex;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 64px;
   align-items: center;
   padding: 15px 18px 13px;
   gap: 12px;
@@ -93,7 +94,7 @@ body {
 }
 
 .header-copy {
-  flex: 1;
+  grid-column: 2;
   min-width: 0;
   text-align: center;
 }
@@ -106,12 +107,15 @@ body {
 }
 
 #header-actions {
-  min-width: 58px;
+  grid-column: 3;
+  width: 64px;
   display: flex;
   justify-content: flex-end;
 }
 
 .icon-btn {
+  grid-column: 1;
+  justify-self: start;
   background: none;
   border: none;
   color: var(--ao3-red);
