@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AO3 读后感</title>
-  <link rel="stylesheet" href="styles.css?v=20260711-6">
+  <link rel="stylesheet" href="styles.css?v=20260711-7">
 </head>
 <body>
   <div id="app">
@@ -54,6 +54,11 @@
         <button class="fandom-tab active" data-fandom="">📚 全部</button>
       </div>
 
+      <!-- CP 快捷筛选 -->
+      <div id="cp-tabs" class="cp-tabs" aria-label="按 CP 快速筛选">
+        <button class="cp-tab active" data-cp="all">全部 CP</button>
+      </div>
+
       <!-- 筛选栏 -->
       <div id="filter-bar" class="filter-bar">
         <select id="filter-rating" class="filter-select" aria-label="按喜欢程度筛选">
@@ -70,9 +75,6 @@
           <option value="已完结">已完结</option>
           <option value="连载中">连载中</option>
           <option value="一发完">一发完</option>
-        </select>
-        <select id="filter-cp" class="filter-select" aria-label="按 CP 筛选">
-          <option value="all">全部 CP</option>
         </select>
         <select id="sort-by" class="filter-select" aria-label="排序方式">
           <option value="date-desc">按阅读日期 ↓</option>
@@ -274,6 +276,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
-  <script src="app.js?v=20260711-2"></script>
+  <script src="app.js?v=20260711-3"></script>
 </body>
 </html>
