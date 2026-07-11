@@ -1,23 +1,23 @@
 /* ========== 基础变量 & 重置 ========== */
 :root {
-  --ao3-red: #7f2537;
-  --ao3-red-dark: #651b2b;
-  --ao3-red-light: #f2e1e3;
-  --bg: #f8f1e8;
-  --bg-card: #fffdf9;
-  --text: #382d29;
-  --text-secondary: #776861;
-  --text-light: #a29189;
-  --border: #e7d9ce;
-  --shadow: 0 4px 18px rgba(80, 53, 42, 0.06);
-  --shadow-lg: 0 12px 32px rgba(80, 53, 42, 0.12);
+  --ao3-red: #9a5361;
+  --ao3-red-dark: #7d3f4c;
+  --ao3-red-light: #f6e9eb;
+  --bg: #f7f6f3;
+  --bg-card: #fffefa;
+  --text: #34302f;
+  --text-secondary: #746d69;
+  --text-light: #9b938e;
+  --border: #e8e3df;
+  --shadow: 0 3px 14px rgba(55, 45, 42, 0.055);
+  --shadow-lg: 0 8px 24px rgba(55, 45, 42, 0.1);
   --radius: 16px;
   --radius-sm: 10px;
   --tag-ao3: #e8eff1;
   --tag-ao3-text: #526d72;
   --tag-private: #f3e1e4;
   --tag-private-text: #8c4351;
-  --heart: #b96b78;
+  --heart: #b87884;
   --safe-bottom: env(safe-area-inset-bottom, 16px);
   --max-width: 480px;
 }
@@ -47,7 +47,7 @@ html {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  background: #eee4da;
+  background: #efeeeb;
   color: var(--text);
   line-height: 1.6;
   display: flex;
@@ -60,9 +60,7 @@ body {
   width: 100%;
   max-width: var(--max-width);
   min-height: 100vh;
-  background:
-    linear-gradient(90deg, transparent 0 31px, rgba(127,37,55,0.045) 31px 32px, transparent 32px),
-    var(--bg);
+  background: var(--bg);
   position: relative;
   overflow-x: hidden;
 }
@@ -72,7 +70,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(248, 241, 232, 0.94);
+  background: rgba(247, 246, 243, 0.94);
   color: var(--text);
   display: flex;
   align-items: center;
@@ -141,13 +139,13 @@ body {
 #bookshelf-view,
 #form-view,
 #detail-view {
-  width: calc(100% - 24px);
-  margin: 12px;
-  padding: 18px 18px calc(80px + var(--safe-bottom));
-  background: rgba(255,253,249,0.86);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  box-shadow: var(--shadow);
+  width: 100%;
+  margin: 0;
+  padding: 18px 16px calc(80px + var(--safe-bottom));
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 /* ========== 搜索栏 ========== */
@@ -393,43 +391,28 @@ body {
 .books-container {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  border-top: 1px solid var(--border);
+  gap: 12px;
+  border-top: 0;
 }
 
 .book-card {
-  background: transparent;
-  border-radius: 0;
-  padding: 18px 4px 18px 20px;
-  box-shadow: none;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 17px 17px 16px 20px;
+  box-shadow: var(--shadow);
   cursor: pointer;
-  border: 0;
-  border-bottom: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-left: 3px solid #c58f99;
   transition: transform 0.15s;
   position: relative;
 }
 
-.book-card::before {
-  content: '';
-  position: absolute;
-  left: 4px;
-  top: 20px;
-  bottom: 20px;
-  width: 3px;
-  border-radius: 3px;
-  background: #c68b95;
-}
-
-.book-card.rating-0::before {
-  background: var(--border);
-}
-
 .book-card:active {
-  transform: none;
-  background: rgba(127,37,55,0.035);
+  transform: scale(0.985);
+  background: var(--bg-card);
 }
 
-.book-card.rating-0 { border-left-color: transparent; }
+.book-card.rating-0 { border-left-color: var(--border); }
 
 .card-header {
   display: flex;
@@ -1027,10 +1010,11 @@ button:focus-visible {
 
 /* ========== 详情页 ========== */
 .detail-content {
-  background: transparent;
-  border-radius: 0;
-  padding: 2px;
-  box-shadow: none;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
   margin-bottom: 20px;
 }
 
@@ -1181,8 +1165,8 @@ button:focus-visible {
   }
 
   .book-card:hover {
-    box-shadow: none;
-    background: rgba(127,37,55,0.025);
+    box-shadow: var(--shadow-lg);
+    background: var(--bg-card);
   }
 
   .filter-toggle {
