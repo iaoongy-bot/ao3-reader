@@ -1516,10 +1516,9 @@ function extractFieldsFromOCR(text) {
   const cpCandidates = [];
   const nameCandidates = [];    // 看起来像人名的行
   const tagCandidates = [];
-  const hasStructuredTags = Boolean(sectionCharacters || sectionTags);
+  // 标签只接受带明确 AO3 标题的区块；识别不到标题时宁可留空，不再猜测。
   if (sectionCharacters) tagCandidates.push(...sectionCharacters.split(/[,，;；]/).map(value => value.trim()).filter(Boolean));
   if (sectionTags) tagCandidates.push(...sectionTags.split(/[,，;；]/).map(value => value.trim()).filter(Boolean));
-  if (!hasStructuredTags && labeledTags) tagCandidates.push(...labeledTags.split(/[,，;；]/).map(value => value.trim()).filter(Boolean));
 
   // 标题页布局：Summary 前一行通常是作者，再往前的连续大字行组成标题。
   const summaryIndex = lines.findIndex(line => /^Summary\s*[:：]?/i.test(line));
@@ -1611,7 +1610,6 @@ function extractFieldsFromOCR(text) {
 
     // 检测下划线词（AO3 标签特征）
     if (/[A-Za-z0-9]+_[A-Za-z0-9]+/.test(line)) {
-      if (!hasStructuredTags) tagCandidates.push(line);
       continue;
     }
 
@@ -1623,12 +1621,7 @@ function extractFieldsFromOCR(text) {
       }
     }
 
-    // 收集其他有意义行作为 tag 候选
-    if (!hasStructuredTags && line.length > 2 && line.length < 80) {
-      if (!/^(the|and|for|not|are|you|all|can|has|had|was|see|did|its|his|her|this|that|with|from|have|been|were|they|them|will|would|could|should|about|there|their|also|than|then|just|like|make|made|more|some|only|over|back|into|been|when|what|who|how|why|where|each|every|part|such|much|very|many|long|good|high|even)$/i.test(line)) {
-        tagCandidates.push(line);
-      }
-    }
+    // 不再把其他普通文字猜成标签，避免 CP、简介和页面文字混入。
   }
 
   // ====== 第二轮：从候选中提取结果 ======
@@ -1650,26 +1643,12 @@ function extractFieldsFromOCR(text) {
   if (ti >= 0) tagCandidates.splice(ti, 1);
 
   // Fandom: 取前几行中像 fandom 的（含关键词 RPF, TV, Movies, Books, 或含 "&"）
-  const fandomPatterns = /(RPF|TV|Movies|Books|Anime|Manga|Cartoons|Video.?Games|Theatre|Music|Celebrities|K-pop|J-pop|C-pop|Bandom)/i;
-  const topLines = tagCandidates.filter(t => lines.indexOf(t) < 5);
-  const fandomFromPattern = topLines.find(t => fandomPatterns.test(t));
   const fandomFromAmpersand = lines.find(l => /&/.test(l) && l.length > 5 && l.length < 60);
 
   if (result.fandom) {
     // 已通过字段标签识别
-  } else if (fandomFromPattern) {
-    result.fandom = fandomFromPattern.replace(/_/g, ' ');
-    const fi = tagCandidates.indexOf(fandomFromPattern);
-    if (fi >= 0) tagCandidates.splice(fi, 1);
   } else if (fandomFromAmpersand && !fandomFromAmpersand.includes('/')) {
     result.fandom = fandomFromAmpersand.replace(/_/g, ' ');
-  } else {
-    // 取前几行中第一个不包含 "/" 的行（排除 title 和 author）
-    const fandomFallback = tagCandidates
-      .find(t => t !== result.title && t !== result.author && !t.includes('/') && t.length > 4 && t.length < 60);
-    if (fandomFallback) {
-      result.fandom = fandomFallback.replace(/_/g, ' ');
-    }
   }
 
   // CP: 取含 "/" 的最佳候选（优先选包含已知角色的）
@@ -1677,15 +1656,6 @@ function extractFieldsFromOCR(text) {
     // 优先选含下划线的（AO3 标签格式），其次选第一个
     const bestCp = cpCandidates.find(c => /_/.test(c)) || cpCandidates[0];
     result.cp = bestCp.replace(/_/g, ' ');
-  }
-
-  // Author fallback: 如果还没找到，从 tagCandidates 中找用户名
-  if (!result.author) {
-    const usernameIdx = tagCandidates.findIndex(t => /^[A-Za-z0-9_]{3,30}$/.test(t) && !knownRatings.test(t));
-    if (usernameIdx >= 0) {
-      result.author = tagCandidates[usernameIdx];
-      tagCandidates.splice(usernameIdx, 1);
-    }
   }
 
   // AO3 原生标签：清除掉已识别的字段
@@ -1699,6 +1669,8 @@ function extractFieldsFromOCR(text) {
     .filter(t => t !== sectionCharacters && t !== sectionTags)
     .filter(t => t !== sectionFandom && t !== sectionCp)
     .filter(t => t !== sectionLanguage)
+    .filter(t => t !== result.cp)
+    .filter(t => !result.summary.includes(normalizeChineseSpacing(t)))
     .filter(t => t.length > 2)
     .map(t => t.replace(/_/g, ' ')))];
 
