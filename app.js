@@ -441,17 +441,67 @@ function getPrimaryCp(cpValue) {
     .replace(/\s+/g, ' ');
 }
 
+// 32 色低饱和手账调色板：交错排列冷暖色，避免相邻编号视觉接近。
+const CP_ACCENT_PALETTE = [
+  '#ad6f7c', '#5f8583', '#a68452', '#6d789b',
+  '#75875d', '#8b6f91', '#b2745f', '#5f8294',
+  '#9a785d', '#667f70', '#a26f8a', '#7c7599',
+  '#a87955', '#608a7a', '#956e72', '#6c839d',
+  '#8d8259', '#77759b', '#b06f6a', '#5d898c',
+  '#91705f', '#71895f', '#9b7193', '#687e91',
+  '#aa825e', '#638575', '#a36f78', '#747b9d',
+  '#928554', '#697f69', '#906f87', '#5e8798',
+];
+
+function hashCpName(value) {
+  // FNV-1a 比旧的逐字乘法更能打散只有少数字符不同的 CP 名称。
+  let hash = 2166136261;
+  for (const char of value) {
+    hash ^= char.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function buildCpColorMap() {
+  const firstSeen = new Map();
+  notes.forEach((note, index) => {
+    const cp = getPrimaryCp(note.cp);
+    if (!cp || firstSeen.has(cp)) return;
+    const time = Date.parse(note.createdAt || '') || index;
+    firstSeen.set(cp, time);
+  });
+
+  const orderedCps = [...firstSeen.keys()].sort((a, b) =>
+    firstSeen.get(a) - firstSeen.get(b) || a.localeCompare(b, 'zh-CN')
+  );
+  const assignments = new Map();
+  const usedSlots = new Set();
+
+  orderedCps.forEach((cp, order) => {
+    const preferred = hashCpName(cp) % CP_ACCENT_PALETTE.length;
+    let slot = preferred;
+    if (order < CP_ACCENT_PALETTE.length) {
+      // 13 与 32 互质，可以遍历全部色位并避开已经使用的颜色。
+      for (let attempt = 0; attempt < CP_ACCENT_PALETTE.length; attempt++) {
+        const candidate = (preferred + attempt * 13) % CP_ACCENT_PALETTE.length;
+        if (!usedSlots.has(candidate)) {
+          slot = candidate;
+          usedSlots.add(candidate);
+          break;
+        }
+      }
+    }
+    assignments.set(cp, CP_ACCENT_PALETTE[slot]);
+  });
+  return assignments;
+}
+
 function getCpAccentColor(cpValue) {
   const primaryCp = getPrimaryCp(cpValue);
   if (!primaryCp) return '';
-  let hash = 0;
-  for (const char of primaryCp) {
-    hash = ((hash * 31) + char.codePointAt(0)) >>> 0;
-  }
-  const hue = hash % 360;
-  const saturation = 18 + ((hash >>> 8) % 7);
-  const lightness = 58 + ((hash >>> 16) % 7);
-  return `hsl(${hue} ${saturation}% ${lightness}%)`;
+  return buildCpColorMap().get(primaryCp)
+    || CP_ACCENT_PALETTE[hashCpName(primaryCp) % CP_ACCENT_PALETTE.length];
 }
 
 function renderBookshelf() {
