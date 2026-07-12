@@ -463,6 +463,28 @@ function hashCpName(value) {
   return hash >>> 0;
 }
 
+function hexToOklab(hex) {
+  const channels = [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16) / 255)
+    .map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  const [r, g, b] = channels;
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ];
+}
+
+const CP_ACCENT_OKLAB = CP_ACCENT_PALETTE.map(hexToOklab);
+
+function cpColorDistance(slotA, slotB) {
+  const a = CP_ACCENT_OKLAB[slotA];
+  const b = CP_ACCENT_OKLAB[slotB];
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+}
+
 function buildCpColorMap() {
   const firstSeen = new Map();
   notes.forEach((note, index) => {
@@ -476,21 +498,25 @@ function buildCpColorMap() {
     firstSeen.get(a) - firstSeen.get(b) || a.localeCompare(b, 'zh-CN')
   );
   const assignments = new Map();
-  const usedSlots = new Set();
+  const usedSlots = [];
 
-  orderedCps.forEach((cp, order) => {
+  orderedCps.forEach(cp => {
     const preferred = hashCpName(cp) % CP_ACCENT_PALETTE.length;
     let slot = preferred;
-    if (order < CP_ACCENT_PALETTE.length) {
-      // 13 与 32 互质，可以遍历全部色位并避开已经使用的颜色。
-      for (let attempt = 0; attempt < CP_ACCENT_PALETTE.length; attempt++) {
-        const candidate = (preferred + attempt * 13) % CP_ACCENT_PALETTE.length;
-        if (!usedSlots.has(candidate)) {
-          slot = candidate;
-          usedSlots.add(candidate);
-          break;
-        }
+    if (usedSlots.length < CP_ACCENT_PALETTE.length) {
+      const available = CP_ACCENT_PALETTE.map((_, index) => index)
+        .filter(index => !usedSlots.includes(index));
+      if (usedSlots.length > 0) {
+        slot = available.reduce((best, candidate) => {
+          const candidateDistance = Math.min(...usedSlots.map(used => cpColorDistance(candidate, used)));
+          const bestDistance = Math.min(...usedSlots.map(used => cpColorDistance(best, used)));
+          if (candidateDistance !== bestDistance) return candidateDistance > bestDistance ? candidate : best;
+          const candidateTie = (candidate - preferred + CP_ACCENT_PALETTE.length) % CP_ACCENT_PALETTE.length;
+          const bestTie = (best - preferred + CP_ACCENT_PALETTE.length) % CP_ACCENT_PALETTE.length;
+          return candidateTie < bestTie ? candidate : best;
+        }, available[0]);
       }
+      usedSlots.push(slot);
     }
     assignments.set(cp, CP_ACCENT_PALETTE[slot]);
   });
