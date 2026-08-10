@@ -1044,6 +1044,10 @@ button:focus-visible {
 .login-card > p { color: var(--text-secondary); font-size: 0.88rem; margin-bottom: 20px; }
 .login-card input { margin-bottom: 14px; }
 .login-card .btn-lg { margin-top: 6px; }
+.login-card .login-forgot {
+  display: block;
+  margin: 10px auto 0;
+}
 .login-card .login-hint { margin: 14px 0 0; text-align: center; font-size: 0.76rem; }
 
 .sync-status {

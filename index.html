@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AO3 读后感</title>
-  <link rel="stylesheet" href="styles.css?v=20260810-1">
+  <link rel="stylesheet" href="styles.css?v=20260810-2">
 </head>
 <body>
   <div id="app">
@@ -31,7 +31,23 @@
         <input type="password" id="login-password" autocomplete="current-password" placeholder="你的密码">
         <p id="login-status" class="fetch-status" role="status" style="display:none"></p>
         <button id="btn-login" class="btn-primary btn-lg">登录</button>
+        <button id="btn-forgot-password" class="btn-text login-forgot" type="button">忘记密码？</button>
         <p class="login-hint">首次使用前，请先在 Supabase 中创建唯一的个人账号。</p>
+      </section>
+    </main>
+
+    <!-- ========== 重设密码页 ========== -->
+    <main id="password-reset-view" class="view login-view" style="display:none">
+      <section class="login-card">
+        <div class="login-icon">🔐</div>
+        <h2>设置新密码</h2>
+        <p>请输入新的登录密码，保存后即可重新登录书架。</p>
+        <label class="form-label" for="reset-password">新密码</label>
+        <input type="password" id="reset-password" autocomplete="new-password" minlength="8" placeholder="至少 8 个字符">
+        <label class="form-label" for="reset-password-confirm">确认新密码</label>
+        <input type="password" id="reset-password-confirm" autocomplete="new-password" minlength="8" placeholder="再次输入新密码">
+        <p id="reset-password-status" class="fetch-status" role="status" style="display:none"></p>
+        <button id="btn-update-password" class="btn-primary btn-lg" type="button">保存新密码</button>
       </section>
     </main>
 
@@ -333,6 +349,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
-  <script src="app.js?v=20260810-2"></script>
+  <script src="app.js?v=20260810-4"></script>
 </body>
 </html>

@@ -31,7 +31,16 @@ window.AO3_CLOUD_CONFIG = {
 
 anon/publishable key 本来就是网页可见的公开密钥。`supabase-schema.sql` 中的 RLS 策略保证登录用户只能访问自己的数据。不要把 service_role key 写入网页。
 
-## 4. 重新部署并首次迁移
+## 4. 配置密码恢复网址
+
+1. 先把网站部署到可公开访问的 HTTPS 地址。
+2. 打开 **Authentication → URL Configuration**。
+3. 将 **Site URL** 设置为网站首页地址，例如 `https://你的域名/项目路径/`。
+4. 在 **Redirect URLs** 中添加同一个首页地址。
+
+密码恢复邮件会跳回这个地址。不要填写 `file:///...` 本地文件路径或默认的 `localhost:3000`。
+
+## 5. 重新部署并首次迁移
 
 重新部署后，在原本保存有记录的 Safari 中先登录一次。网站会把现有本地记录自动上传到 Supabase。确认顶部显示“已同步”后，再在主屏幕快捷方式和其他设备中登录。
 

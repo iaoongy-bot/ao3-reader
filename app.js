@@ -178,6 +178,7 @@ const $bookshelfView = document.getElementById('bookshelf-view');
 const $formView = document.getElementById('form-view');
 const $detailView = document.getElementById('detail-view');
 const $loginView = document.getElementById('login-view');
+const $passwordResetView = document.getElementById('password-reset-view');
 const $headerTitle = document.getElementById('header-title');
 const $headerSubtitle = document.getElementById('header-subtitle');
 const $btnBack = document.getElementById('btn-back');
@@ -186,11 +187,12 @@ const $headerActions = document.getElementById('header-actions');
 function showView(view) {
   currentView = view;
   $loginView.style.display = view === 'login' ? 'flex' : 'none';
+  $passwordResetView.style.display = view === 'password-reset' ? 'flex' : 'none';
   $bookshelfView.style.display = view === 'bookshelf' ? '' : 'none';
   $formView.style.display = view === 'form' ? '' : 'none';
   $detailView.style.display = view === 'detail' ? '' : 'none';
 
-  if (view === 'login') {
+  if (view === 'login' || view === 'password-reset') {
     $headerTitle.textContent = '📖 AO3 读后感';
     $headerSubtitle.style.display = 'none';
     $btnBack.style.display = 'none';
@@ -1830,11 +1832,87 @@ const $loginEmail = document.getElementById('login-email');
 const $loginPassword = document.getElementById('login-password');
 const $loginStatus = document.getElementById('login-status');
 const $btnLogin = document.getElementById('btn-login');
+const $btnForgotPassword = document.getElementById('btn-forgot-password');
+const $resetPassword = document.getElementById('reset-password');
+const $resetPasswordConfirm = document.getElementById('reset-password-confirm');
+const $resetPasswordStatus = document.getElementById('reset-password-status');
+const $btnUpdatePassword = document.getElementById('btn-update-password');
 
 function showLoginStatus(message, type = 'error') {
   $loginStatus.style.display = '';
   $loginStatus.textContent = message;
   $loginStatus.className = `fetch-status ${type}`;
+}
+
+function showResetPasswordStatus(message, type = 'error') {
+  $resetPasswordStatus.style.display = '';
+  $resetPasswordStatus.textContent = message;
+  $resetPasswordStatus.className = `fetch-status ${type}`;
+}
+
+function getPasswordRecoveryRedirectUrl() {
+  if (!['http:', 'https:'].includes(window.location.protocol)) return '';
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
+async function handleForgotPassword() {
+  const email = $loginEmail.value.trim();
+  if (!email) {
+    showLoginStatus('请先输入你的登录邮箱');
+    $loginEmail.focus();
+    return;
+  }
+  const redirectTo = getPasswordRecoveryRedirectUrl();
+  if (!redirectTo) {
+    showLoginStatus('请通过线上网站打开书架后再重设密码，本地文件地址无法接收恢复链接');
+    return;
+  }
+
+  $btnForgotPassword.disabled = true;
+  showLoginStatus('正在发送密码恢复邮件…', 'loading');
+  const { error } = await cloud.auth.resetPasswordForEmail(email, { redirectTo });
+  $btnForgotPassword.disabled = false;
+  if (error) {
+    showLoginStatus('恢复邮件发送失败，请稍后重试');
+    return;
+  }
+  showLoginStatus('恢复邮件已发送，请打开邮件中的链接设置新密码', 'success');
+}
+
+async function handleUpdatePassword() {
+  const password = $resetPassword.value;
+  const confirmation = $resetPasswordConfirm.value;
+  if (password.length < 8) {
+    showResetPasswordStatus('新密码至少需要 8 个字符');
+    $resetPassword.focus();
+    return;
+  }
+  if (password !== confirmation) {
+    showResetPasswordStatus('两次输入的密码不一致');
+    $resetPasswordConfirm.focus();
+    return;
+  }
+
+  $btnUpdatePassword.disabled = true;
+  showResetPasswordStatus('正在保存新密码…', 'loading');
+  const email = currentUser?.email || '';
+  const { error } = await cloud.auth.updateUser({ password });
+  $btnUpdatePassword.disabled = false;
+  if (error) {
+    showResetPasswordStatus('新密码设置失败，请重新发送恢复邮件后再试');
+    return;
+  }
+
+  $resetPassword.value = '';
+  $resetPasswordConfirm.value = '';
+  if (window.history.replaceState) {
+    window.history.replaceState({}, document.title, getPasswordRecoveryRedirectUrl());
+  }
+  await cloud.auth.signOut();
+  $loginEmail.value = email;
+  $loginPassword.value = '';
+  showView('login');
+  showLoginStatus('密码已更新，请使用新密码登录', 'success');
 }
 
 async function handleLogin() {
@@ -1861,8 +1939,13 @@ async function handleLogin() {
 }
 
 $btnLogin.addEventListener('click', handleLogin);
+$btnForgotPassword.addEventListener('click', handleForgotPassword);
+$btnUpdatePassword.addEventListener('click', handleUpdatePassword);
 $loginPassword.addEventListener('keydown', event => {
   if (event.key === 'Enter') handleLogin();
+});
+$resetPasswordConfirm.addEventListener('keydown', event => {
+  if (event.key === 'Enter') handleUpdatePassword();
 });
 
 async function init() {
@@ -1888,12 +1971,28 @@ async function init() {
     showView('login');
     showLoginStatus('云端尚未配置，请先填写 config.js');
     $btnLogin.disabled = true;
+    $btnForgotPassword.disabled = true;
     return;
   }
 
+  let passwordRecoveryActive = false;
+  cloud.auth.onAuthStateChange((event, sessionValue) => {
+    currentUser = sessionValue?.user || null;
+    if (event === 'PASSWORD_RECOVERY') {
+      passwordRecoveryActive = true;
+      $resetPasswordStatus.style.display = 'none';
+      showView('password-reset');
+      $resetPassword.focus();
+      return;
+    }
+    if (!currentUser && !passwordRecoveryActive) showView('login');
+  });
+
   const { data: { session } } = await cloud.auth.getSession();
   currentUser = session?.user || null;
-  if (currentUser) {
+  if (passwordRecoveryActive) {
+    return;
+  } else if (currentUser) {
     showView('bookshelf');
     renderBookshelf();
     syncWithCloud();
@@ -1901,10 +2000,6 @@ async function init() {
     showView('login');
   }
 
-  cloud.auth.onAuthStateChange((_event, sessionValue) => {
-    currentUser = sessionValue?.user || null;
-    if (!currentUser) showView('login');
-  });
 }
 
 init();
