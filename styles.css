@@ -511,6 +511,33 @@ body {
   letter-spacing: 1px;
 }
 
+.card-side-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.reading-status {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #eeeae6;
+  color: var(--text-secondary);
+}
+
+.reading-status-追更中 { background: #f7e8cf; color: #8a5b19; }
+.reading-status-阅读中 { background: #e3edf6; color: #416985; }
+.reading-status-已读完 { background: #e3f0e5; color: #477052; }
+.reading-status-已弃 { background: #ece9e7; color: #77706c; }
+
 .card-meta {
   font-size: 0.78rem;
   color: var(--text-secondary);
@@ -616,6 +643,11 @@ body {
 
 .books-container.list-view .card-stars {
   font-size: 0.75rem;
+}
+
+.books-container.list-view .card-side-meta {
+  flex-direction: row;
+  align-items: center;
 }
 
 .books-container.list-view .card-title {

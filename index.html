@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AO3 读后感</title>
-  <link rel="stylesheet" href="styles.css?v=20260711-9">
+  <link rel="stylesheet" href="styles.css?v=20260810-1">
 </head>
 <body>
   <div id="app">
@@ -70,11 +70,12 @@
           <option value="1">♥ 1颗心</option>
           <option value="0">未标记</option>
         </select>
-        <select id="filter-status" class="filter-select" aria-label="按完结状态筛选">
-          <option value="all">全部状态</option>
-          <option value="已完结">已完结</option>
-          <option value="连载中">连载中</option>
-          <option value="一发完">一发完</option>
+        <select id="filter-reading-status" class="filter-select" aria-label="按阅读状态筛选">
+          <option value="all">全部阅读状态</option>
+          <option value="追更中">追更中</option>
+          <option value="阅读中">阅读中</option>
+          <option value="已读完">已读完</option>
+          <option value="已弃">已弃</option>
         </select>
         <select id="filter-cp" class="filter-select" aria-label="按 CP 筛选">
           <option value="all">全部 CP</option>
@@ -242,10 +243,21 @@
         </div>
       </section>
 
-      <!-- 阅读日期 -->
-      <section class="form-section">
-        <label class="form-label" for="input-date">阅读日期</label>
-        <input type="date" id="input-date">
+      <!-- 阅读状态 & 阅读日期 -->
+      <section class="form-section form-row">
+        <div class="form-col">
+          <label class="form-label" for="input-reading-status">阅读状态</label>
+          <select id="input-reading-status">
+            <option value="追更中">追更中</option>
+            <option value="阅读中">阅读中</option>
+            <option value="已读完" selected>已读完</option>
+            <option value="已弃">已弃</option>
+          </select>
+        </div>
+        <div class="form-col">
+          <label class="form-label" for="input-date">阅读日期</label>
+          <input type="date" id="input-date">
+        </div>
       </section>
 
       <!-- 读后感 -->
@@ -321,6 +333,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
-  <script src="app.js?v=20260712-4"></script>
+  <script src="app.js?v=20260810-2"></script>
 </body>
 </html>

@@ -166,6 +166,11 @@ function findNoteIndex(id) {
 // ========== 预置标签 ==========
 
 const PRESET_TAGS = ['甜文', '虐心', 'HE', 'BE', '长草', '慢热', '神作', '文笔好', '设定绝', '待追更'];
+const READING_STATUSES = ['追更中', '阅读中', '已读完', '已弃'];
+
+function getReadingStatus(note) {
+  return READING_STATUSES.includes(note?.readingStatus) ? note.readingStatus : '已读完';
+}
 
 // ========== 视图切换 ==========
 
@@ -254,7 +259,7 @@ const $cpTabs = document.getElementById('cp-tabs');
 const $filterRating = document.getElementById('filter-rating');
 const $filterBar = document.getElementById('filter-bar');
 const $btnFilterToggle = document.getElementById('btn-filter-toggle');
-const $filterStatus = document.getElementById('filter-status');
+const $filterReadingStatus = document.getElementById('filter-reading-status');
 const $filterCp = document.getElementById('filter-cp');
 const $sortBy = document.getElementById('sort-by');
 const $resultCount = document.getElementById('result-count');
@@ -285,7 +290,7 @@ function getFilteredNotes() {
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
     result = result.filter(n => [
-      n.title, n.author, n.fandom, n.cp, n.summary, n.notes, n.workId,
+      n.title, n.author, n.fandom, n.cp, n.summary, n.notes, n.workId, getReadingStatus(n),
       ...(Array.isArray(n.ao3Tags) ? n.ao3Tags : []),
       ...(Array.isArray(n.privateTags) ? n.privateTags : []),
     ].some(value => String(value || '').toLowerCase().includes(q)));
@@ -298,10 +303,10 @@ function getFilteredNotes() {
     result = result.filter(n => n.rating === r);
   }
 
-  // 状态筛选
-  const statusFilter = $filterStatus.value;
+  // 阅读状态筛选
+  const statusFilter = $filterReadingStatus.value;
   if (statusFilter !== 'all') {
-    result = result.filter(n => n.completionStatus === statusFilter);
+    result = result.filter(n => getReadingStatus(n) === statusFilter);
   }
 
   // 标签筛选
@@ -567,6 +572,7 @@ function createBookCard(note) {
 
   const heartCount = Math.round(Math.min(5, Math.max(0, Number(note.rating) || 0)));
   const heartsHtml = renderHeartIcons(heartCount);
+  const readingStatus = getReadingStatus(note);
 
   const privateTagsHtml = (note.privateTags || []).map(t =>
     `<span class="card-tag private" data-tag="${escapeAttribute(t)}">${escapeHtml(t)}</span>`
@@ -575,7 +581,10 @@ function createBookCard(note) {
   card.innerHTML = `
     <div class="card-header">
       <div class="card-title">${escapeHtml(note.title || '未命名')}</div>
-      ${heartsHtml ? `<div class="card-stars" aria-label="喜欢程度 ${heartCount} 颗心">${heartsHtml}</div>` : ''}
+      <div class="card-side-meta">
+        <span class="reading-status reading-status-${escapeAttribute(readingStatus)}">${escapeHtml(readingStatus)}</span>
+        ${heartsHtml ? `<div class="card-stars" aria-label="喜欢程度 ${heartCount} 颗心">${heartsHtml}</div>` : ''}
+      </div>
     </div>
     <div class="card-meta">
       <span>${escapeHtml(note.author || '未知作者')}</span>
@@ -663,7 +672,7 @@ $btnSearchClear.addEventListener('click', () => {
 
 // 筛选事件
 $filterRating.addEventListener('change', () => renderBookshelf());
-$filterStatus.addEventListener('change', () => renderBookshelf());
+$filterReadingStatus.addEventListener('change', () => renderBookshelf());
 $filterCp.addEventListener('change', () => {
   activeCp = $filterCp.value;
   renderBookshelf();
@@ -756,6 +765,7 @@ function normalizeImportedNote(value) {
     ao3Url: safeAo3Url(value.ao3Url), title, author,
     fandom: stringValue('fandom', 500), cp: stringValue('cp', 500),
     wordCount: stringValue('wordCount', 100), completionStatus: stringValue('completionStatus', 30),
+    readingStatus: READING_STATUSES.includes(value.readingStatus) ? value.readingStatus : '已读完',
     workId: stringValue('workId', 100), rating: Math.min(5, Math.max(0, Number(value.rating) || 0)),
     ao3Tags: tagList('ao3Tags'), privateTags: tagList('privateTags'),
     notes: stringValue('notes', 100000), readingDate: stringValue('readingDate', 20),
@@ -804,6 +814,7 @@ const $inputFandom = document.getElementById('input-fandom');
 const $inputCp = document.getElementById('input-cp');
 const $inputWordcount = document.getElementById('input-wordcount');
 const $inputStatus = document.getElementById('input-status');
+const $inputReadingStatus = document.getElementById('input-reading-status');
 const $inputWorkId = document.getElementById('input-workid');
 const $inputSummary = document.getElementById('input-summary');
 const $inputDate = document.getElementById('input-date');
@@ -833,6 +844,7 @@ function captureFormState() {
     cp: $inputCp.value,
     wordCount: $inputWordcount.value,
     completionStatus: $inputStatus.value,
+    readingStatus: $inputReadingStatus.value,
     workId: $inputWorkId.value,
     summary: $inputSummary.value,
     readingDate: $inputDate.value,
@@ -875,6 +887,7 @@ function restoreDraft(expectedEditingId = null) {
     $inputCp.value = draft.cp || '';
     $inputWordcount.value = draft.wordCount || '';
     $inputStatus.value = draft.completionStatus || '';
+    $inputReadingStatus.value = READING_STATUSES.includes(draft.readingStatus) ? draft.readingStatus : '已读完';
     $inputWorkId.value = draft.workId || '';
     $inputSummary.value = draft.summary || '';
     $inputDate.value = draft.readingDate || new Date().toISOString().split('T')[0];
@@ -906,6 +919,7 @@ function resetForm() {
   $inputCp.value = '';
   $inputWordcount.value = '';
   $inputStatus.value = '';
+  $inputReadingStatus.value = '已读完';
   $inputWorkId.value = '';
   $inputSummary.value = '';
   $inputDate.value = new Date().toISOString().split('T')[0];
@@ -934,6 +948,7 @@ function fillForm(note) {
   $inputCp.value = note.cp || '';
   $inputWordcount.value = note.wordCount || '';
   $inputStatus.value = note.completionStatus || '';
+  $inputReadingStatus.value = getReadingStatus(note);
   $inputWorkId.value = note.workId || '';
   $inputSummary.value = note.summary || '';
   $inputDate.value = note.readingDate || new Date().toISOString().split('T')[0];
@@ -959,6 +974,7 @@ function formToNote() {
     cp: $inputCp.value.trim(),
     wordCount: $inputWordcount.value.trim(),
     completionStatus: $inputStatus.value,
+    readingStatus: $inputReadingStatus.value,
     workId: $inputWorkId.value.trim(),
     summary: $inputSummary.value.trim(),
     rating: formRating,
@@ -1144,6 +1160,7 @@ function openDetail(id) {
     ${note.fandom ? `<div class="detail-field"><div class="detail-field-label">Fandom</div><div class="detail-field-value">${escapeHtml(note.fandom)}</div></div>` : ''}
     ${note.cp ? `<div class="detail-field"><div class="detail-field-label">CP</div><div class="detail-field-value">${escapeHtml(note.cp)}</div></div>` : ''}
     ${note.wordCount ? `<div class="detail-field"><div class="detail-field-label">字数</div><div class="detail-field-value">${escapeHtml(note.wordCount)}</div></div>` : ''}
+    <div class="detail-field"><div class="detail-field-label">阅读状态</div><div class="detail-field-value"><span class="reading-status reading-status-${escapeAttribute(getReadingStatus(note))}">${escapeHtml(getReadingStatus(note))}</span></div></div>
     ${note.completionStatus ? `<div class="detail-field"><div class="detail-field-label">完结状态</div><div class="detail-field-value">${escapeHtml(note.completionStatus)}</div></div>` : ''}
     ${note.workId ? `<div class="detail-field"><div class="detail-field-label">门牌号</div><div class="detail-field-value">${escapeHtml(note.workId)}</div></div>` : ''}
     ${note.summary ? `<div class="detail-field"><div class="detail-field-label">文章简介</div><div class="detail-summary">${escapeHtml(note.summary)}</div></div>` : ''}
