@@ -513,8 +513,8 @@ body {
 
 .card-side-meta {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  flex-direction: row;
+  align-items: center;
   gap: 5px;
   flex-shrink: 0;
 }
@@ -643,11 +643,6 @@ body {
 
 .books-container.list-view .card-stars {
   font-size: 0.75rem;
-}
-
-.books-container.list-view .card-side-meta {
-  flex-direction: row;
-  align-items: center;
 }
 
 .books-container.list-view .card-title {
