@@ -234,11 +234,9 @@ function updateSyncStatus(text, isError = false) {
 $btnBack.addEventListener('click', () => {
   if (currentView === 'form') {
     if (!confirmLeaveForm()) return;
-    showView('bookshelf');
-    renderBookshelf();
+    returnToBookshelf();
   } else if (currentView === 'detail') {
-    showView('bookshelf');
-    renderBookshelf();
+    returnToBookshelf();
   }
 });
 
@@ -247,6 +245,7 @@ $btnBack.addEventListener('click', () => {
 let viewMode = 'card';
 let activeTagFilter = null;
 let searchQuery = '';
+let bookshelfReturnPosition = null;
 
 const $booksContainer = document.getElementById('books-container');
 const EMPTY_STATE_HTML = `<div class="empty-state">
@@ -262,6 +261,7 @@ const $filterRating = document.getElementById('filter-rating');
 const $filterBar = document.getElementById('filter-bar');
 const $btnFilterToggle = document.getElementById('btn-filter-toggle');
 const $filterReadingStatus = document.getElementById('filter-reading-status');
+const $filterCompletionStatus = document.getElementById('filter-completion-status');
 const $filterCp = document.getElementById('filter-cp');
 const $sortBy = document.getElementById('sort-by');
 const $resultCount = document.getElementById('result-count');
@@ -274,6 +274,38 @@ const $btnExport = document.getElementById('btn-export');
 const $btnImport = document.getElementById('btn-import');
 const $inputImportFile = document.getElementById('input-import-file');
 const $btnAdd = document.getElementById('btn-add');
+
+function rememberBookshelfPosition(cardId = null, cardElement = null) {
+  bookshelfReturnPosition = {
+    cardId,
+    viewportTop: cardElement ? cardElement.getBoundingClientRect().top : null,
+    scrollY: window.scrollY,
+  };
+}
+
+function restoreBookshelfPosition() {
+  const position = bookshelfReturnPosition;
+  if (!position) return;
+  requestAnimationFrame(() => {
+    const card = position.cardId
+      ? [...$booksContainer.querySelectorAll('.book-card')].find(item => item.dataset.noteId === position.cardId)
+      : null;
+    if (card && Number.isFinite(position.viewportTop)) {
+      const offset = card.getBoundingClientRect().top - position.viewportTop;
+      window.scrollTo({ top: Math.max(0, window.scrollY + offset), behavior: 'auto' });
+      card.focus({ preventScroll: true });
+    } else {
+      window.scrollTo({ top: position.scrollY, behavior: 'auto' });
+    }
+    bookshelfReturnPosition = null;
+  });
+}
+
+function returnToBookshelf() {
+  showView('bookshelf');
+  renderBookshelf();
+  restoreBookshelfPosition();
+}
 
 function getFilteredNotes() {
   let result = [...notes];
@@ -292,7 +324,8 @@ function getFilteredNotes() {
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
     result = result.filter(n => [
-      n.title, n.author, n.fandom, n.cp, n.summary, n.notes, n.workId, getReadingStatus(n),
+      n.title, n.author, n.fandom, n.cp, n.summary, n.notes, n.workId,
+      getReadingStatus(n), n.completionStatus,
       ...(Array.isArray(n.ao3Tags) ? n.ao3Tags : []),
       ...(Array.isArray(n.privateTags) ? n.privateTags : []),
     ].some(value => String(value || '').toLowerCase().includes(q)));
@@ -309,6 +342,12 @@ function getFilteredNotes() {
   const statusFilter = $filterReadingStatus.value;
   if (statusFilter !== 'all') {
     result = result.filter(n => getReadingStatus(n) === statusFilter);
+  }
+
+  // AO3 文章完结状态筛选
+  const completionStatusFilter = $filterCompletionStatus.value;
+  if (completionStatusFilter !== 'all') {
+    result = result.filter(n => n.completionStatus === completionStatusFilter);
   }
 
   // 标签筛选
@@ -558,16 +597,21 @@ function renderBookshelf() {
 function createBookCard(note) {
   const card = document.createElement('div');
   card.className = `book-card rating-${note.rating}`;
+  card.dataset.noteId = note.id;
   const cpAccentColor = getCpAccentColor(note.cp);
   if (cpAccentColor) card.style.borderLeftColor = cpAccentColor;
   else card.classList.add('no-cp');
   card.tabIndex = 0;
   card.setAttribute('role', 'button');
   card.setAttribute('aria-label', `打开《${note.title || '未命名'}》详情`);
-  card.addEventListener('click', () => openDetail(note.id));
+  card.addEventListener('click', () => {
+    rememberBookshelfPosition(note.id, card);
+    openDetail(note.id);
+  });
   card.addEventListener('keydown', event => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
+      rememberBookshelfPosition(note.id, card);
       openDetail(note.id);
     }
   });
@@ -675,6 +719,7 @@ $btnSearchClear.addEventListener('click', () => {
 // 筛选事件
 $filterRating.addEventListener('change', () => renderBookshelf());
 $filterReadingStatus.addEventListener('change', () => renderBookshelf());
+$filterCompletionStatus.addEventListener('change', () => renderBookshelf());
 $filterCp.addEventListener('change', () => {
   activeCp = $filterCp.value;
   renderBookshelf();
@@ -779,10 +824,12 @@ function normalizeImportedNote(value) {
 
 // 添加按钮
 $btnAdd.addEventListener('click', () => {
+  rememberBookshelfPosition();
   editingId = null;
   resetForm();
   restoreDraft();
   showView('form');
+  window.scrollTo({ top: 0, behavior: 'auto' });
 });
 
 // ========== 添加/编辑表单 ==========
@@ -1104,14 +1151,12 @@ $btnSave.addEventListener('click', () => {
   }
   saveAndSync(note);
   clearDraft();
-  showView('bookshelf');
-  renderBookshelf();
+  returnToBookshelf();
 });
 
 $btnCancelForm.addEventListener('click', () => {
   if (!confirmLeaveForm()) return;
-  showView('bookshelf');
-  renderBookshelf();
+  returnToBookshelf();
 });
 
 $formView.addEventListener('input', saveDraftSoon);
@@ -1174,6 +1219,7 @@ function openDetail(id) {
   `;
 
   showView('detail');
+  window.scrollTo({ top: 0, behavior: 'auto' });
 }
 
 $btnEdit.addEventListener('click', () => {
@@ -1183,6 +1229,7 @@ $btnEdit.addEventListener('click', () => {
   fillForm(note);
   restoreDraft(editingId);
   showView('form');
+  window.scrollTo({ top: 0, behavior: 'auto' });
 });
 
 $btnDelete.addEventListener('click', () => {
@@ -1218,8 +1265,7 @@ $btnConfirmDelete.addEventListener('click', () => {
     pendingDeleteId = null;
   }
   $confirmDialog.style.display = 'none';
-  showView('bookshelf');
-  renderBookshelf();
+  returnToBookshelf();
 });
 
 // ================================================================

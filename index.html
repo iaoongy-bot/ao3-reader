@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AO3 读后感</title>
-  <link rel="stylesheet" href="styles.css?v=20260810-3">
+  <link rel="stylesheet" href="styles.css?v=20260810-4">
 </head>
 <body>
   <div id="app">
@@ -92,6 +92,12 @@
           <option value="阅读中">阅读中</option>
           <option value="已读完">已读完</option>
           <option value="已弃">已弃</option>
+        </select>
+        <select id="filter-completion-status" class="filter-select" aria-label="按文章完结状态筛选">
+          <option value="all">全部文章状态</option>
+          <option value="一发完">一发完</option>
+          <option value="已完结">已完结</option>
+          <option value="连载中">连载中</option>
         </select>
         <select id="filter-cp" class="filter-select" aria-label="按 CP 筛选">
           <option value="all">全部 CP</option>
@@ -349,6 +355,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
-  <script src="app.js?v=20260810-4"></script>
+  <script src="app.js?v=20260810-6"></script>
 </body>
 </html>
