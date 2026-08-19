@@ -361,11 +361,11 @@ function getFilteredNotes() {
   // 排序
   const sortVal = $sortBy.value;
   switch (sortVal) {
-    case 'date-desc':
-      result.sort((a, b) => String(b.readingDate || '').localeCompare(String(a.readingDate || '')));
+    case 'added-desc':
+      result.sort((a, b) => getAddedTimestamp(b) - getAddedTimestamp(a));
       break;
-    case 'date-asc':
-      result.sort((a, b) => String(a.readingDate || '').localeCompare(String(b.readingDate || '')));
+    case 'added-asc':
+      result.sort((a, b) => getAddedTimestamp(a) - getAddedTimestamp(b));
       break;
     case 'rating-desc':
       result.sort((a, b) => b.rating - a.rating);
@@ -376,6 +376,13 @@ function getFilteredNotes() {
   }
 
   return result;
+}
+
+function getAddedTimestamp(note) {
+  const createdTime = Date.parse(note.createdAt || '');
+  if (Number.isFinite(createdTime)) return createdTime;
+  const readingTime = Date.parse(note.readingDate || '');
+  return Number.isFinite(readingTime) ? readingTime : 0;
 }
 
 function getUniqueFandoms() {
@@ -390,7 +397,7 @@ function getCps(cpValue) {
   return String(cpValue || '')
     .split(/[,，;；\n]/)
     .map(value => value.trim())
-    .filter(Boolean);
+    .filter(value => /[\/／]/.test(value) && !/[&＆]/.test(value));
 }
 
 function getCpStats(fandom) {
@@ -1286,6 +1293,25 @@ async function fetchAO3FromBackend(url) {
   return json.data;
 }
 
+function extractWorkIdFromAo3Url(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    const validHost = url.hostname === 'archiveofourown.org' || url.hostname === 'www.archiveofourown.org';
+    if (!validHost) return '';
+    return url.pathname.match(/^\/works\/(\d+)/)?.[1] || '';
+  } catch {
+    return '';
+  }
+}
+
+function fillWorkIdFromUrl() {
+  const workId = extractWorkIdFromAo3Url($inputAo3Url.value);
+  if (workId) $inputWorkId.value = workId;
+  return workId;
+}
+
+$inputAo3Url.addEventListener('input', fillWorkIdFromUrl);
+
 function fillFormFromAO3Data(data) {
   if (data.title) $inputTitle.value = data.title;
   if (data.author) $inputAuthor.value = data.author;
@@ -1329,12 +1355,13 @@ function fillFormFromAO3Data(data) {
 
 $btnAutoFetch.addEventListener('click', async () => {
   const url = $inputAo3Url.value.trim();
+  const workId = fillWorkIdFromUrl();
   if (!url) {
     showFetchStatus('请先粘贴 AO3 链接', 'error');
     return;
   }
 
-  if (!url.includes('archiveofourown.org/works/')) {
+  if (!workId) {
     showFetchStatus('请输入有效的 AO3 作品链接', 'error');
     return;
   }
@@ -1442,11 +1469,14 @@ $btnStartOcr.addEventListener('click', async () => {
     await worker.setParameters({ preserve_interword_spaces: '0' });
 
     const recognizedTexts = [];
+    const lockTitleCandidates = [];
     for (currentFileIndex = 0; currentFileIndex < files.length; currentFileIndex++) {
       $ocrProgressText.textContent = `正在增强第 ${currentFileIndex + 1}/${files.length} 张截图...`;
-      const enhancedImage = await preprocessOcrImage(files[currentFileIndex]);
-      const { data } = await worker.recognize(enhancedImage);
+      const { ocrImage, colorCanvas } = await preprocessOcrImage(files[currentFileIndex]);
+      const { data } = await worker.recognize(ocrImage, {}, { blocks: true });
       recognizedTexts.push(data.text || '');
+      const lockTitle = extractTitleBesideBlueLock(data, colorCanvas);
+      if (lockTitle) lockTitleCandidates.push(lockTitle);
     }
     await worker.terminate();
     worker = null;
@@ -1456,6 +1486,7 @@ $btnStartOcr.addEventListener('click', async () => {
 
     // 明确分隔每张截图，防止上一张末尾内容串入下一张字段。
     const extracted = extractFieldsFromOCR(recognizedTexts.join('\nIMAGE_BREAK_BOUNDARY\n'));
+    if (lockTitleCandidates.length > 0) extracted.title = lockTitleCandidates[0];
     showOcrReview(extracted);
 
     $ocrProgressText.textContent = '✅ 识别完成，请核对结果';
@@ -1478,19 +1509,99 @@ async function preprocessOcrImage(file) {
   const scale = Math.min(2, 2200 / bitmap.width, Math.sqrt(maxPixels / (bitmap.width * bitmap.height)));
   const width = Math.max(1, Math.round(bitmap.width * scale));
   const height = Math.max(1, Math.round(bitmap.height * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d', { alpha: false });
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, width, height);
+  const colorCanvas = document.createElement('canvas');
+  colorCanvas.width = width;
+  colorCanvas.height = height;
+  const colorCtx = colorCanvas.getContext('2d', { alpha: false });
+  colorCtx.fillStyle = '#fff';
+  colorCtx.fillRect(0, 0, width, height);
+  colorCtx.drawImage(bitmap, 0, 0, width, height);
+
+  const ocrCanvas = document.createElement('canvas');
+  ocrCanvas.width = width;
+  ocrCanvas.height = height;
+  const ocrCtx = ocrCanvas.getContext('2d', { alpha: false });
+  ocrCtx.fillStyle = '#fff';
+  ocrCtx.fillRect(0, 0, width, height);
   // 中文笔画较细，过高对比度容易让横撇点等笔画断裂。
-  ctx.filter = 'grayscale(1) contrast(1.2) brightness(1.03)';
-  ctx.drawImage(bitmap, 0, 0, width, height);
+  ocrCtx.filter = 'grayscale(1) contrast(1.2) brightness(1.03)';
+  ocrCtx.drawImage(colorCanvas, 0, 0);
   if (typeof bitmap.close === 'function') bitmap.close();
   return new Promise((resolve, reject) => {
-    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('图片增强失败')), 'image/png');
+    ocrCanvas.toBlob(blob => blob
+      ? resolve({ ocrImage: blob, colorCanvas })
+      : reject(new Error('图片增强失败')), 'image/png');
   });
+}
+
+function extractTitleBesideBlueLock(ocrData, colorCanvas) {
+  const lines = [];
+  for (const block of ocrData.blocks || []) {
+    for (const paragraph of block.paragraphs || []) {
+      for (const line of paragraph.lines || []) {
+        if (line?.text?.trim() && line.bbox) lines.push(line);
+      }
+    }
+  }
+  if (lines.length === 0) return '';
+  lines.sort((a, b) => a.bbox.y0 - b.bbox.y0 || a.bbox.x0 - b.bbox.x0);
+
+  const ctx = colorCanvas.getContext('2d', { willReadFrequently: true });
+  const candidates = lines.map((line, index) => {
+    const box = line.bbox;
+    const lineHeight = Math.max(1, box.y1 - box.y0);
+    const left = Math.max(0, Math.floor(box.x0 - lineHeight * 2.8));
+    const top = Math.max(0, Math.floor(box.y0 - lineHeight * 0.45));
+    const right = Math.min(colorCanvas.width, Math.ceil(box.x0 + lineHeight * 1.2));
+    const bottom = Math.min(colorCanvas.height, Math.ceil(box.y1 + lineHeight * 0.45));
+    if (right <= left || bottom <= top) return null;
+
+    const pixels = ctx.getImageData(left, top, right - left, bottom - top).data;
+    let bluePixels = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      const r = pixels[i];
+      const g = pixels[i + 1];
+      const b = pixels[i + 2];
+      if (b >= 95 && b - r >= 28 && b > r * 1.18 && b >= g * 1.04) bluePixels++;
+    }
+
+    const text = cleanLockTitleLine(line.text);
+    const looksLikeUi = /^(?:archiveofourown\.org|https?:|www\.|\d{1,2}:\d{2}|Log In|Sign Up|Search|Menu|Home)$/i.test(text);
+    const minimumBluePixels = Math.max(6, Math.round(lineHeight * 0.35));
+    if (!text || looksLikeUi || bluePixels < minimumBluePixels) return null;
+    return { index, bluePixels, lineHeight, text };
+  }).filter(Boolean);
+
+  if (candidates.length === 0) return '';
+  candidates.sort((a, b) => b.bluePixels - a.bluePixels || a.index - b.index);
+  const best = candidates[0];
+  const titleParts = [best.text];
+  const firstBox = lines[best.index].bbox;
+  let previousBox = firstBox;
+
+  for (let i = best.index + 1; i < lines.length && titleParts.length < 3; i++) {
+    const line = lines[i];
+    const text = cleanLockTitleLine(line.text);
+    const height = Math.max(1, line.bbox.y1 - line.bbox.y0);
+    const verticalGap = line.bbox.y0 - previousBox.y1;
+    const aligned = Math.abs(line.bbox.x0 - firstBox.x0) <= Math.max(best.lineHeight, height) * 1.6;
+    if (verticalGap > Math.max(best.lineHeight, height) * 1.15 || !aligned) break;
+    if (/^(?:by\s+|Summary|Rating|Warnings?|Fandoms?|Relationships?|Characters?|Additional Tags?|Language|Stats)\b/i.test(text)) break;
+    titleParts.push(text);
+    previousBox = line.bbox;
+  }
+
+  return titleParts.join(' ')
+    .replace(/\s+by\s+.+$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cleanLockTitleLine(value) {
+  return String(value || '')
+    .replace(/^[^\p{L}\p{N}\[【《（(]+/u, '')
+    .replace(/[|{}~`^<>«»“”‘’]/g, '')
+    .trim();
 }
 
 function loadImageForOcr(file) {
